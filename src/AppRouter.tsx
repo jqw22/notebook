@@ -6,9 +6,16 @@ import Notes from "./pages/Notes";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
 
+// Resolve basename safely — esbuild-wasm (Shakespeare preview) doesn't
+// define import.meta.env.BASE_URL. We use a type assertion + optional chaining
+// so esbuild emits null-guarded code instead of a bare property access.
+const baseUrl = (
+  (import.meta as unknown as { env?: { BASE_URL?: string } })?.env?.BASE_URL ?? ''
+).replace(/\/$/, '');
+
 export function AppRouter() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+    <BrowserRouter basename={baseUrl}>
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Index />} />
