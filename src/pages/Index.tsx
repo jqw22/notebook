@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 const Index = () => {
   useSeoMeta({
-    title: 'Nostrbook',
+    title: 'Notebook',
     description: 'A private, encrypted notebook powered by Nostr NIP-44 encryption.',
   });
 
@@ -25,7 +25,7 @@ const Index = () => {
         {/* Heading */}
         <div className="space-y-3">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Nostrbook
+            Notebook
           </h1>
           <p className="text-lg text-muted-foreground max-w-md mx-auto">
             Your personal encrypted notebook on Nostr. Notes are end-to-end

@@ -28,7 +28,7 @@ export interface SaveNoteParams {
 }
 
 const NOTE_KIND = 30078;
-const ALT_DESCRIPTION = 'Encrypted Nostrbook entry';
+const ALT_DESCRIPTION = 'Encrypted Notebook entry';
 
 /** Fetch, decrypt, create, update, and delete NIP-44 encrypted private notes (kind 30078). */
 export function useEncryptedNotes(): {
