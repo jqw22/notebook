@@ -8,7 +8,7 @@ import NotFound from "./pages/NotFound";
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/Nostrbook">
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Index />} />
