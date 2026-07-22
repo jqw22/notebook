@@ -40,8 +40,10 @@ jobs:
       - name: Install dependencies and build
         run: |
           npm install
-          npm run build
+          DEPLOY_BASE="/$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)/" npm run build
           cp dist/index.html dist/404.html
+        env:
+          DEPLOY_BASE: /${{ github.event.repository.name }}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

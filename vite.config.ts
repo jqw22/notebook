@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
-  base: '/Nostrbook/',
+  base: process.env.DEPLOY_BASE || '/',
   server: {
     host: "::",
     port: 8080,
