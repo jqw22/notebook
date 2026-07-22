@@ -30,6 +30,8 @@ const SORT_LABELS: Record<SortMode, string> = {
   'title-desc': 'Title Z\u2013A',
 };
 
+const UNTAGGED_KEY = '__untagged__';
+
 export default function NotesPage() {
   useSeoMeta({
     title: 'Notebook',
@@ -50,26 +52,37 @@ export default function NotesPage() {
   const isError = notesQuery.isError;
   const error = notesQuery.error;
 
-  // Collect all unique tags across all notes
-  const allTags = useMemo(() => {
+  // Collect all unique tags across all notes, plus count untagged
+  const { allTags, untaggedCount } = useMemo(() => {
     const tagSet = new Set<string>();
+    let untagged = 0;
     for (const note of notes) {
+      if (note.tags.length === 0) {
+        untagged++;
+      }
       for (const tag of note.tags) {
         tagSet.add(tag);
       }
     }
-    return Array.from(tagSet).sort();
+    return { allTags: Array.from(tagSet).sort(), untaggedCount: untagged };
   }, [notes]);
 
   // Filter and sort notes
   const filteredNotes = useMemo(() => {
     let result = notes;
 
-    // Filter by multi-select tags (OR logic — match any selected tag)
+    // Filter by multi-select tags (OR logic)
     if (selectedTags.size > 0) {
-      result = result.filter((note) =>
-        note.tags.some((tag) => selectedTags.has(tag)),
+      const wantsUntagged = selectedTags.has(UNTAGGED_KEY);
+      const realTags = new Set(
+        Array.from(selectedTags).filter((t) => t !== UNTAGGED_KEY),
       );
+
+      result = result.filter((note) => {
+        if (wantsUntagged && note.tags.length === 0) return true;
+        if (realTags.size > 0 && note.tags.some((tag) => realTags.has(tag))) return true;
+        return false;
+      });
     }
 
     // Client-side search by title and content
@@ -323,7 +336,7 @@ export default function NotesPage() {
         </div>
 
         {/* Tag filter bar */}
-        {allTags.length > 0 && (
+        {(allTags.length > 0 || untaggedCount > 0) && (
           <ScrollArea className="pb-1">
             <div className="flex gap-1.5 flex-nowrap items-center">
               {selectedTags.size > 0 && (
@@ -334,6 +347,15 @@ export default function NotesPage() {
                 >
                   Clear
                   <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {untaggedCount > 0 && (
+                <Badge
+                  variant={selectedTags.has(UNTAGGED_KEY) ? 'default' : 'outline'}
+                  className="cursor-pointer shrink-0"
+                  onClick={() => toggleTag(UNTAGGED_KEY)}
+                >
+                  Untagged ({untaggedCount})
                 </Badge>
               )}
               {allTags.map((tag) => (
