@@ -1,6 +1,6 @@
 # NIP.md — Custom Nostr Schemas
 
-## Encrypted Private Notebook (Kind 30078)
+## Nostrbook — Encrypted Notebook (Kind 30078)
 
 Uses the existing NIP-78 (kind 30078, "Arbitrary Custom App Data") addressable event kind for private, encrypted notebook entries.
 
@@ -12,7 +12,7 @@ Uses the existing NIP-78 (kind 30078, "Arbitrary Custom App Data") addressable e
 | content   | NIP-44 encrypted JSON (encrypted to self)                                 |
 | `d` tag   | UUID v4 — unique note identifier                                          |
 | `t` tags  | User-defined organizational tags (cleartext, one per tag)                 |
-| `alt` tag | `"Encrypted private notebook entry"` (NIP-31)                             |
+| `alt` tag | `"Encrypted Nostrbook entry"` (NIP-31)                             |
 
 ### Decrypted Content Schema (JSON)
 

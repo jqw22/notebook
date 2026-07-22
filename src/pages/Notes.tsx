@@ -16,8 +16,8 @@ import { cn } from '@/lib/utils';
 
 export default function NotesPage() {
   useSeoMeta({
-    title: 'Private Notebook',
-    description: 'Your encrypted private notebook powered by Nostr NIP-44 encryption.',
+    title: 'Nostrbook',
+    description: 'Your encrypted notebook powered by Nostr NIP-44 encryption.',
   });
 
   const { user } = useCurrentUser();
@@ -91,10 +91,10 @@ export default function NotesPage() {
             <Shield className="h-8 w-8 text-primary" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Private Notebook</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Nostrbook</h1>
             <p className="text-muted-foreground">
               Your notes are encrypted with NIP-44 and stored on Nostr relays.
-              Log in to access your private notebook.
+              Log in to access your notebook.
             </p>
           </div>
           <LoginArea className="w-full max-w-60 mx-auto" />
@@ -193,7 +193,7 @@ export default function NotesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Private Notebook</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Nostrbook</h1>
             <p className="text-muted-foreground mt-1">
               {notes.length} note{notes.length !== 1 ? 's' : ''} &middot; end-to-end encrypted
             </p>
