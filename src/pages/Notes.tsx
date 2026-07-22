@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSeoMeta } from '@unhead/react';
-import { Plus, NotebookPen, Shield, Key, AlertTriangle, Loader2 } from 'lucide-react';
+import { Plus, NotebookPen, Shield, Key, AlertTriangle, Search, ArrowUpDown, X } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEncryptedNotes, type EncryptedNote, type SaveNoteParams } from '@/hooks/useEncryptedNotes';
@@ -8,11 +8,27 @@ import { NoteCard } from '@/components/notes/NoteCard';
 import { NoteEditor } from '@/components/notes/NoteEditor';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+
+type SortMode = 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+
+const SORT_LABELS: Record<SortMode, string> = {
+  newest: 'Newest first',
+  oldest: 'Oldest first',
+  'title-asc': 'Title A\u2013Z',
+  'title-desc': 'Title Z\u2013A',
+};
 
 export default function NotesPage() {
   useSeoMeta({
@@ -25,7 +41,9 @@ export default function NotesPage() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<EncryptedNote | undefined>(undefined);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const notes = notesQuery.data ?? [];
   const isLoading = notesQuery.isLoading;
@@ -43,11 +61,69 @@ export default function NotesPage() {
     return Array.from(tagSet).sort();
   }, [notes]);
 
-  // Filter notes by selected tag
+  // Filter and sort notes
   const filteredNotes = useMemo(() => {
-    if (!selectedTag) return notes;
-    return notes.filter((note) => note.tags.includes(selectedTag));
-  }, [notes, selectedTag]);
+    let result = notes;
+
+    // Filter by multi-select tags (OR logic — match any selected tag)
+    if (selectedTags.size > 0) {
+      result = result.filter((note) =>
+        note.tags.some((tag) => selectedTags.has(tag)),
+      );
+    }
+
+    // Client-side search by title and content
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (note) =>
+          note.data.title.toLowerCase().includes(query) ||
+          note.data.content.toLowerCase().includes(query),
+      );
+    }
+
+    // Sort
+    switch (sortMode) {
+      case 'newest':
+        result = [...result].sort((a, b) => b.data.updated_at - a.data.updated_at);
+        break;
+      case 'oldest':
+        result = [...result].sort((a, b) => a.data.updated_at - b.data.updated_at);
+        break;
+      case 'title-asc':
+        result = [...result].sort((a, b) =>
+          (a.data.title || 'Untitled').localeCompare(b.data.title || 'Untitled'),
+        );
+        break;
+      case 'title-desc':
+        result = [...result].sort((a, b) =>
+          (b.data.title || 'Untitled').localeCompare(a.data.title || 'Untitled'),
+        );
+        break;
+    }
+
+    return result;
+  }, [notes, selectedTags, searchQuery, sortMode]);
+
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) {
+        next.delete(tag);
+      } else {
+        next.add(tag);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearTags = useCallback(() => {
+    setSelectedTags(new Set());
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
 
   const openNewNote = useCallback(() => {
     setEditingNote(undefined);
@@ -81,6 +157,8 @@ export default function NotesPage() {
     },
     [deleteNote, closeEditor],
   );
+
+  const hasActiveFilters = selectedTags.size > 0 || searchQuery.trim() !== '';
 
   // --- Not logged in ---
   if (!user) {
@@ -207,25 +285,63 @@ export default function NotesPage() {
           </div>
         </div>
 
+        {/* Toolbar: search + sort */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search notes..."
+              className="pl-9 pr-8"
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
+            <SelectTrigger className="w-full sm:w-[180px] gap-1.5">
+              <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(
+                Object.entries(SORT_LABELS) as [SortMode, string][]
+              ).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Tag filter bar */}
         {allTags.length > 0 && (
           <ScrollArea className="pb-1">
-            <div className="flex gap-1.5 flex-nowrap">
-              <Badge
-                variant={selectedTag === null ? 'default' : 'outline'}
-                className="cursor-pointer shrink-0"
-                onClick={() => setSelectedTag(null)}
-              >
-                All
-              </Badge>
+            <div className="flex gap-1.5 flex-nowrap items-center">
+              {selectedTags.size > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer shrink-0 gap-1"
+                  onClick={clearTags}
+                >
+                  Clear
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
               {allTags.map((tag) => (
                 <Badge
                   key={tag}
-                  variant={selectedTag === tag ? 'default' : 'outline'}
+                  variant={selectedTags.has(tag) ? 'default' : 'outline'}
                   className="cursor-pointer shrink-0"
-                  onClick={() =>
-                    setSelectedTag((prev) => (prev === tag ? null : tag))
-                  }
+                  onClick={() => toggleTag(tag)}
                 >
                   {tag}
                 </Badge>
@@ -236,19 +352,26 @@ export default function NotesPage() {
 
         {/* Notes grid */}
         {filteredNotes.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {filteredNotes.map((note) => (
-              <NoteCard
-                key={note.event.tags.find(([n]) => n === 'd')?.[1] ?? note.event.id}
-                note={note}
-                onClick={() => openEditNote(note)}
-              />
-            ))}
-          </div>
+          <>
+            {hasActiveFilters && (
+              <p className="text-sm text-muted-foreground">
+                Showing {filteredNotes.length} of {notes.length} note{notes.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {filteredNotes.map((note) => (
+                <NoteCard
+                  key={note.event.tags.find(([n]) => n === 'd')?.[1] ?? note.event.id}
+                  note={note}
+                  onClick={() => openEditNote(note)}
+                />
+              ))}
+            </div>
+          </>
         ) : (
           <EmptyState
             hasNotes={notes.length > 0}
-            hasFilter={selectedTag !== null}
+            hasFilter={hasActiveFilters}
             onCreateNew={openNewNote}
           />
         )}
@@ -282,8 +405,7 @@ function EmptyState({
       <Card className="border-dashed">
         <CardContent className="py-12 px-8 text-center">
           <p className="text-muted-foreground max-w-sm mx-auto">
-            No notes match the selected tag. Try selecting a different tag or
-            clear the filter.
+            No notes match your search or tag filters. Try adjusting your filters.
           </p>
         </CardContent>
       </Card>
