@@ -9,8 +9,8 @@
     "test": "npm i --silent && tsc --noEmit && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'"
   },
   "dependencies": {
-    "@nostrify/nostrify": "0.52.2",
-    "@nostrify/react": "^0.6.2",
+    "@nostrify/nostrify": "0.55.1",
+    "@nostrify/react": "0.6.8",
     "@radix-ui/react-toast": "^1.2.1",
     "@tanstack/react-query": "^5.100.5",
     "@unhead/react": "^3.1.0",
