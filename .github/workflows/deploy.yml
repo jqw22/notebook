@@ -36,18 +36,10 @@ jobs:
         with:
           node-version: "22"
 
-      # Prefer `npm ci`: it installs exactly what the lockfile pins and fails if
-      # package.json and the lockfile have diverged, which is what we want.
-      # It requires a committed package-lock.json, so fall back to `npm install`
-      # until that exists.
+      # npm ci installs exactly what package-lock.json pins and fails if
+      # package.json and the lockfile have diverged.
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            echo "No package-lock.json yet; using npm install (commit a lockfile to enable npm ci)."
-            npm install
-          fi
+        run: npm ci
 
       # Runs the project's own `test` script: tsc --noEmit, eslint, vitest,
       # then a production build. DEPLOY_BASE makes the build use the correct
