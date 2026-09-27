@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -377,8 +376,8 @@ export default function NotesPage() {
 
         {/* Tag filter bar */}
         {(allTags.length > 0 || untaggedCount > 0 || followupCount > 0) && (
-          <ScrollArea className="pb-1">
-            <div className="flex gap-1.5 flex-nowrap items-center">
+          <div className="pb-1">
+            <div className="flex flex-wrap gap-1.5 items-center">
               {selectedTags.size > 0 && (
                 <Badge
                   variant="secondary"
@@ -419,7 +418,7 @@ export default function NotesPage() {
                 </Badge>
               ))}
             </div>
-          </ScrollArea>
+          </div>
         )}
 
         {/* Notes grid */}
