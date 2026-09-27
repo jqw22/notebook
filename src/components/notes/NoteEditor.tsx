@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus, Loader2, Trash2, Calendar } from 'lucide-react';
+import { X, Loader2, Trash2, Calendar } from 'lucide-react';
 import type { EncryptedNote } from '@/hooks/useEncryptedNotes';
 
 export interface NoteEditorProps {
@@ -45,43 +45,30 @@ export function NoteEditor({
 }: NoteEditorProps) {
   const isNew = !note;
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  // Initial form state comes from the note. The parent remounts this
+  // component (via `key`) whenever an edit session starts, so props never
+  // need to be synced into state from an effect.
+  const [title, setTitle] = useState(note?.data.title ?? '');
+  const [content, setContent] = useState(note?.data.content ?? '');
+  const [tags, setTags] = useState<string[]>(note?.tags ?? []);
   const [tagInput, setTagInput] = useState('');
-  const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpDate, setFollowUpDate] = useState(
+    note?.data.follow_up_date
+      ? new Date(note.data.follow_up_date * 1000).toISOString().slice(0, 10)
+      : '',
+  );
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   // Filtered suggestions from existing tags, excluding already-added tags
-  const filteredSuggestions = tagInput.trim()
-    ? suggestedTags
-        .filter(
-          (t) =>
-            t.toLowerCase().startsWith(tagInput.trim().toLowerCase()) &&
-            !tags.includes(t),
-        )
-        .slice(0, 6)
-    : [];
+  const filteredSuggestions = useMemo(() => {
+    const query = tagInput.trim().toLowerCase();
+    if (!query) return [];
+    return suggestedTags
+      .filter((t) => t.toLowerCase().startsWith(query) && !tags.includes(t))
+      .slice(0, 6);
+  }, [tagInput, suggestedTags, tags]);
 
   const showSuggestions = filteredSuggestions.length > 0;
-
-  // Reset highlight when input changes
-  useEffect(() => {
-    setHighlightedIndex(-1);
-  }, [tagInput]);
-  useEffect(() => {
-    if (isOpen) {
-      setTitle(note?.data.title ?? '');
-      setContent(note?.data.content ?? '');
-      setTags(note?.tags ?? []);
-      setTagInput('');
-      setFollowUpDate(
-        note?.data.follow_up_date
-          ? new Date(note.data.follow_up_date * 1000).toISOString().slice(0, 10)
-          : '',
-      );
-    }
-  }, [isOpen, note]);
 
   const addTag = useCallback(
     (tagOverride?: string) => {
@@ -279,7 +266,10 @@ export function NoteEditor({
                   id="note-tags"
                   type="text"
                   value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    setHighlightedIndex(-1);
+                  }}
                   onKeyDown={handleTagKeyDown}
                   onBlur={handleTagBlur}
                   placeholder={tags.length === 0 ? 'Add tags...' : ''}

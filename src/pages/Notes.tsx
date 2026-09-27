@@ -34,6 +34,9 @@ const SORT_LABELS: Record<SortMode, string> = {
 const UNTAGGED_KEY = '__untagged__';
 const FOLLOWUP_KEY = '__followup__';
 
+/** Stable empty array so `notes` keeps a stable identity across renders. */
+const EMPTY_NOTES: EncryptedNote[] = [];
+
 export default function NotesPage() {
   useSeoMeta({
     title: 'Simple Notebook',
@@ -45,12 +48,15 @@ export default function NotesPage() {
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<EncryptedNote | undefined>(undefined);
+  // Incremented each time an edit session starts, so NoteEditor remounts with
+  // fresh state initialized from the selected note.
+  const [editorSession, setEditorSession] = useState(0);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const result = notesQuery.data;
-  const notes = result?.notes ?? [];
+  const notes = result?.notes ?? EMPTY_NOTES;
   const offline = result?.offline ?? false;
   const isLoading = notesQuery.isLoading;
   const isError = notesQuery.isError;
@@ -161,11 +167,13 @@ export default function NotesPage() {
   const openNewNote = useCallback(() => {
     setEditingNote(undefined);
     setEditorOpen(true);
+    setEditorSession((n) => n + 1);
   }, []);
 
   const openEditNote = useCallback((note: EncryptedNote) => {
     setEditingNote(note);
     setEditorOpen(true);
+    setEditorSession((n) => n + 1);
   }, []);
 
   const closeEditor = useCallback(() => {
@@ -434,7 +442,6 @@ export default function NotesPage() {
           </>
         ) : (
           <EmptyState
-            hasNotes={notes.length > 0}
             hasFilter={hasActiveFilters}
             onCreateNew={openNewNote}
           />
@@ -442,6 +449,7 @@ export default function NotesPage() {
 
         {/* Note Editor Dialog */}
         <NoteEditor
+          key={editorSession}
           note={editingNote}
           isOpen={editorOpen}
           onClose={closeEditor}
@@ -457,11 +465,9 @@ export default function NotesPage() {
 }
 
 function EmptyState({
-  hasNotes,
   hasFilter,
   onCreateNew,
 }: {
-  hasNotes: boolean;
   hasFilter: boolean;
   onCreateNew: () => void;
 }) {
