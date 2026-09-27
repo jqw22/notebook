@@ -1,0 +1,47 @@
+name: Bootstrap package-lock.json
+
+# One-off helper: resolves the dependency tree and commits package-lock.json to
+# main, so the deploy workflow can install with `npm ci` (reproducible) instead
+# of `npm install`. Run it once from the Actions tab ("Run workflow"). This file
+# can be deleted afterwards.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Resolves the full tree and writes package-lock.json without installing
+      # node_modules. The committed .npmrc (legacy-peer-deps=true) is picked up
+      # automatically, so the lockfile matches what CI resolves.
+      - name: Generate lockfile
+        run: npm install --package-lock-only
+
+      - name: Commit and push if the lockfile changed
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json was not generated"
+            exit 1
+          fi
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json is already up to date; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: add package-lock.json for reproducible installs (npm ci)"
+          git push origin HEAD:main
