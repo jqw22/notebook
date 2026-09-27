@@ -34,6 +34,19 @@ export interface SaveNoteParams {
 const NOTE_KIND = 30078;
 const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
 
+/**
+ * Query key for the user's encrypted notes.
+ *
+ * The leading `'nostr'` segment is required so that the app-wide
+ * `queryClient.invalidateQueries({ queryKey: ['nostr'] })` call in
+ * NostrProvider (fired whenever the relay list changes, e.g. after NIP-65
+ * sync on login) also invalidates and refetches this query. Without it, the
+ * notes query could run against the default relays, never refetch once the
+ * user's own relays load, and show an empty notebook.
+ */
+const notesQueryKey = (pubkey: string | undefined) =>
+  ['nostr', 'encrypted-notes', pubkey] as const;
+
 /** Fetch, decrypt, create, update, and delete NIP-44 encrypted private notes (kind 30078). */
 export function useEncryptedNotes(): {
   notesQuery: UseQueryResult<EncryptedNote[]>;
@@ -45,7 +58,7 @@ export function useEncryptedNotes(): {
   const queryClient = useQueryClient();
 
   const notesQuery = useQuery({
-    queryKey: ['encrypted-notes', user?.pubkey],
+    queryKey: notesQueryKey(user?.pubkey),
     queryFn: async ({ signal }): Promise<EncryptedNote[]> => {
       if (!user) return [];
       if (!user.signer.nip44) {
@@ -133,7 +146,7 @@ export function useEncryptedNotes(): {
       return event;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['encrypted-notes', user?.pubkey] });
+      queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {
       console.error('Failed to save note:', error);
@@ -159,7 +172,7 @@ export function useEncryptedNotes(): {
       return event;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['encrypted-notes', user?.pubkey] });
+      queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {
       console.error('Failed to delete note:', error);

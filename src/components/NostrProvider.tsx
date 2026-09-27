@@ -69,9 +69,11 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     reqRouter(filters: NostrFilter[]) {
       const routes = new Map<string, NostrFilter[]>();
 
-      // Route to all read relays
+      // Query every relay we can either read from or write to. Write-only
+      // relays are included so we can always read back events we published
+      // to them (reads are a superset of writes).
       const readRelays = relayMetadataRef.current.relays
-        .filter(r => r.read)
+        .filter(r => r.read || r.write)
         .map(r => r.url);
 
       for (const url of readRelays) {
@@ -90,7 +92,11 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       return [...allRelays];
     },
-    eoseTimeout: 200,
+    // Wait up to 1s (Nostrify's default) after the first relay sends EOSE
+    // before canceling slower relays. A very small value here drops events
+    // from relays that take a moment to respond, causing data to appear
+    // intermittently. See NPool docs: eoseTimeout defaults to 1000ms.
+    eoseTimeout: 1000,
   }));
 
   // Derive the current signer from the active login. This mirrors the
