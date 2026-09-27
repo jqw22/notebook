@@ -36,10 +36,18 @@ jobs:
         with:
           node-version: "22"
 
-      # Separate install step so dependency failures are attributed clearly
-      # (e.g. the npm arborist crash) rather than buried in the test run.
+      # Prefer `npm ci`: it installs exactly what the lockfile pins and fails if
+      # package.json and the lockfile have diverged, which is what we want.
+      # It requires a committed package-lock.json, so fall back to `npm install`
+      # until that exists.
       - name: Install dependencies
-        run: npm install
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "No package-lock.json yet; using npm install (commit a lockfile to enable npm ci)."
+            npm install
+          fi
 
       # Runs the project's own `test` script: tsc --noEmit, eslint, vitest,
       # then a production build. DEPLOY_BASE makes the build use the correct
