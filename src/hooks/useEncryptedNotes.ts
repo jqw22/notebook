@@ -2,6 +2,7 @@ import { useNostr } from '@nostrify/react';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 
+import { getStoredEvents, mergeEvents, requestPersistentStorage, storeEvents } from '@/lib/noteStore';
 import { useCurrentUser } from './useCurrentUser';
 
 /** The decrypted payload stored in the event content. */
@@ -35,6 +36,13 @@ const NOTE_KIND = 30078;
 const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
 
 /**
+ * Safety timeout for the relay read. If a relay socket hangs without ever
+ * responding, we abandon the fetch and fall back to the local cache rather
+ * than leaving the notebook stuck on its loading state.
+ */
+const RELAY_FETCH_TIMEOUT_MS = 8000;
+
+/**
  * Query key for the user's encrypted notes.
  *
  * The leading `'nostr'` segment is required so that the app-wide
@@ -47,9 +55,18 @@ const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
 const notesQueryKey = (pubkey: string | undefined) =>
   ['nostr', 'encrypted-notes', pubkey] as const;
 
+/** Resolved notes plus the state of the most recent relay sync. */
+export interface NotesResult {
+  notes: EncryptedNote[];
+  /** True when the last relay fetch failed and we are showing cached notes. */
+  offline: boolean;
+  /** Unix ms timestamp of the last successful relay sync, if any. */
+  lastSyncedAt?: number;
+}
+
 /** Fetch, decrypt, create, update, and delete NIP-44 encrypted private notes (kind 30078). */
 export function useEncryptedNotes(): {
-  notesQuery: UseQueryResult<EncryptedNote[]>;
+  notesQuery: UseQueryResult<NotesResult>;
   saveNote: UseMutationResult<NostrEvent, Error, SaveNoteParams>;
   deleteNote: UseMutationResult<NostrEvent, Error, string>;
 } {
@@ -59,22 +76,56 @@ export function useEncryptedNotes(): {
 
   const notesQuery = useQuery({
     queryKey: notesQueryKey(user?.pubkey),
-    queryFn: async ({ signal }): Promise<EncryptedNote[]> => {
-      if (!user) return [];
+    queryFn: async ({ signal }): Promise<NotesResult> => {
+      if (!user) return { notes: [], offline: false };
       if (!user.signer.nip44) {
         throw new Error(
           'Your signer does not support NIP-44 encryption. Please upgrade your signer extension.',
         );
       }
 
-      const events = await nostr.query(
-        [{ kinds: [NOTE_KIND], authors: [user.pubkey], limit: 200 }],
-        { signal },
-      );
+      requestPersistentStorage();
+
+      // Offline-first: load whatever is cached locally before touching relays.
+      const cachedEvents = await getStoredEvents(user.pubkey);
+
+      // Best-effort relay fetch with a safety timeout, so a hung socket can
+      // never block the cached notes from appearing. A failure (offline,
+      // relays down, timeout) must not throw: the cache still has the notes.
+      const controller = new AbortController();
+      const abortFromCaller = () => controller.abort();
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener('abort', abortFromCaller, { once: true });
+      }
+      const timer = setTimeout(() => controller.abort(), RELAY_FETCH_TIMEOUT_MS);
+
+      let remoteEvents: NostrEvent[] = [];
+      let offline = false;
+      try {
+        remoteEvents = await nostr.query(
+          [{ kinds: [NOTE_KIND], authors: [user.pubkey], limit: 200 }],
+          { signal: controller.signal },
+        );
+      } catch (error) {
+        // A caller-initiated cancellation should propagate so TanStack Query
+        // discards the result; anything else counts as "offline".
+        if (signal.aborted) throw error;
+        offline = true;
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', abortFromCaller);
+      }
+
+      // Merge remote and cached copies, keep the newest per note, and persist
+      // so the local cache becomes the union of every version seen.
+      const merged = mergeEvents(cachedEvents, remoteEvents);
+      await storeEvents(user.pubkey, merged);
 
       const notes: EncryptedNote[] = [];
 
-      for (const event of events) {
+      for (const event of merged) {
         // Skip events with empty content (deleted)
         if (!event.content) continue;
 
@@ -92,7 +143,9 @@ export function useEncryptedNotes(): {
       }
 
       // Sort newest first
-      return notes.sort((a, b) => b.data.updated_at - a.data.updated_at);
+      notes.sort((a, b) => b.data.updated_at - a.data.updated_at);
+
+      return { notes, offline, lastSyncedAt: offline ? undefined : Date.now() };
     },
     enabled: !!user,
     staleTime: 30_000,
@@ -145,7 +198,10 @@ export function useEncryptedNotes(): {
       await nostr.event(event, { signal: AbortSignal.timeout(5000) });
       return event;
     },
-    onSuccess: () => {
+    onSuccess: (event) => {
+      // Persist locally right away so the note survives even if the write
+      // hasn't propagated to our read relays yet.
+      if (user) void storeEvents(user.pubkey, [event]);
       queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {
@@ -171,7 +227,9 @@ export function useEncryptedNotes(): {
       await nostr.event(event, { signal: AbortSignal.timeout(5000) });
       return event;
     },
-    onSuccess: () => {
+    onSuccess: (event) => {
+      // Persist the tombstone locally so the deletion sticks.
+      if (user) void storeEvents(user.pubkey, [event]);
       queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {

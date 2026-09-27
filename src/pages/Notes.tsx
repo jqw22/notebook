@@ -1,11 +1,12 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useSeoMeta } from '@unhead/react';
-import { Plus, NotebookPen, Shield, Key, AlertTriangle, Search, ArrowUpDown, X, Calendar } from 'lucide-react';
+import { Plus, NotebookPen, Shield, Key, AlertTriangle, Search, ArrowUpDown, X, Calendar, WifiOff } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useEncryptedNotes, type EncryptedNote, type SaveNoteParams } from '@/hooks/useEncryptedNotes';
 import { NoteCard } from '@/components/notes/NoteCard';
 import { NoteEditor } from '@/components/notes/NoteEditor';
+import { BackupMenu } from '@/components/notes/BackupMenu';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,7 +49,9 @@ export default function NotesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
 
-  const notes = notesQuery.data ?? [];
+  const result = notesQuery.data;
+  const notes = result?.notes ?? [];
+  const offline = result?.offline ?? false;
   const isLoading = notesQuery.isLoading;
   const isError = notesQuery.isError;
   const error = notesQuery.error;
@@ -169,6 +172,10 @@ export default function NotesPage() {
     setEditorOpen(false);
     setEditingNote(undefined);
   }, []);
+
+  const handleImported = useCallback(() => {
+    void notesQuery.refetch();
+  }, [notesQuery]);
 
   const handleSave = useCallback(
     (params: SaveNoteParams) => {
@@ -306,14 +313,22 @@ export default function NotesPage() {
               {notes.length} note{notes.length !== 1 ? 's' : ''} &middot; end-to-end encrypted
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <LoginArea className="max-w-40" />
+            <BackupMenu pubkey={user.pubkey} onImported={handleImported} />
             <Button onClick={openNewNote} className="gap-1.5">
               <Plus className="h-4 w-4" />
               New Note
             </Button>
           </div>
         </div>
+
+        {offline && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+            <WifiOff className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>Relays couldn't be reached — showing your locally saved notes.</span>
+          </div>
+        )}
 
         {/* Toolbar: search + sort */}
         <div className="flex flex-col sm:flex-row gap-3">
