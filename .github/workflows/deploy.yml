@@ -36,11 +36,17 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install dependencies and build
-        run: |
-          npm install
-          DEPLOY_BASE="/$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)/" npm run build
-          cp dist/index.html dist/404.html
+      # Separate install step so dependency failures are attributed clearly
+      # (e.g. the npm arborist crash) rather than buried in the test run.
+      - name: Install dependencies
+        run: npm install
+
+      # Runs the project's own `test` script: tsc --noEmit, eslint, vitest,
+      # then a production build. DEPLOY_BASE makes the build use the correct
+      # sub-path for GitHub Pages project sites, and the script copies
+      # index.html to 404.html for SPA routing.
+      - name: Type-check, lint, test, and build
+        run: npm run test
         env:
           DEPLOY_BASE: /${{ github.event.repository.name }}/
 
