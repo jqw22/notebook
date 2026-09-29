@@ -2,6 +2,7 @@ import { Calendar } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { formatNoteDate, toDateFromUnixSeconds } from '@/lib/noteDates';
 import type { EncryptedNote } from '@/hooks/useEncryptedNotes';
 
 export interface NoteCardProps {
@@ -13,19 +14,10 @@ export interface NoteCardProps {
 export function NoteCard({ note, onClick, className }: NoteCardProps) {
   const { data, tags } = note;
 
-  const formattedDate = new Date(data.updated_at * 1000).toLocaleDateString(
-    undefined,
-    { month: 'short', day: 'numeric', year: 'numeric' },
-  );
-
-  const hasFollowUp = !!data.follow_up_date;
-  const followUpDate = hasFollowUp
-    ? new Date(data.follow_up_date! * 1000).toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      })
-    : null;
+  const updatedDate = toDateFromUnixSeconds(data.updated_at);
+  const formattedDate = formatNoteDate(data.updated_at) ?? 'Unknown date';
+  const followUpDate = formatNoteDate(data.follow_up_date);
+  const hasFollowUp = followUpDate !== null;
 
   return (
     <Card
@@ -50,7 +42,7 @@ export function NoteCard({ note, onClick, className }: NoteCardProps) {
           <h3 className="text-lg font-semibold leading-tight line-clamp-2">
             {data.title || 'Untitled Note'}
           </h3>
-          {hasFollowUp && followUpDate && (
+          {hasFollowUp && (
             <span className="shrink-0 flex items-center gap-1 text-xs text-pink-700 bg-pink-100 rounded-md px-2 py-1 font-medium">
               <Calendar className="h-3 w-3" />
               {followUpDate}
@@ -79,7 +71,7 @@ export function NoteCard({ note, onClick, className }: NoteCardProps) {
             )}
           </div>
           <time
-            dateTime={new Date(data.updated_at * 1000).toISOString()}
+            dateTime={updatedDate?.toISOString()}
             className="text-xs text-muted-foreground shrink-0"
           >
             {formattedDate}

@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { X, Loader2, Trash2, Calendar } from 'lucide-react';
+import { dateInputValueToUnixSeconds, toDateInputValue } from '@/lib/noteDates';
 import type { EncryptedNote } from '@/hooks/useEncryptedNotes';
 
 export interface NoteEditorProps {
@@ -52,10 +53,8 @@ export function NoteEditor({
   const [content, setContent] = useState(note?.data.content ?? '');
   const [tags, setTags] = useState<string[]>(note?.tags ?? []);
   const [tagInput, setTagInput] = useState('');
-  const [followUpDate, setFollowUpDate] = useState(
-    note?.data.follow_up_date
-      ? new Date(note.data.follow_up_date * 1000).toISOString().slice(0, 10)
-      : '',
+  const [followUpDate, setFollowUpDate] = useState(() =>
+    toDateInputValue(note?.data.follow_up_date),
   );
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
@@ -138,9 +137,7 @@ export function NoteEditor({
   );
 
   const handleSave = () => {
-    const followUpTimestamp = followUpDate
-      ? Math.floor(new Date(followUpDate + 'T00:00:00').getTime() / 1000)
-      : null;
+    const followUpTimestamp = dateInputValueToUnixSeconds(followUpDate);
     onSave({
       id: note ? note.event.tags.find(([n]) => n === 'd')?.[1] ?? '' : crypto.randomUUID(),
       title: title.trim(),
@@ -157,9 +154,7 @@ export function NoteEditor({
     }
   };
 
-  const existingFollowUpStr = note?.data.follow_up_date
-    ? new Date(note.data.follow_up_date * 1000).toISOString().slice(0, 10)
-    : '';
+  const existingFollowUpStr = toDateInputValue(note?.data.follow_up_date);
 
   const hasChanges = isNew
     ? title.trim() || content.trim() || tags.length > 0 || followUpDate

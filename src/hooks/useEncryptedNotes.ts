@@ -36,6 +36,52 @@ const NOTE_KIND = 30078;
 const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
 
 /**
+ * Validate and normalise a decrypted note payload.
+ *
+ * The payload is user-controlled event content and is therefore never trusted.
+ * Kind 30078 is the generic NIP-78 "app data" kind shared by many clients, so
+ * a query filtered by author alone can also return *other* apps' app-data
+ * events. Those payloads — and any legacy or corrupt note — must be recognised
+ * here and either coerced into a valid note or rejected, rather than reaching
+ * the UI where a missing `updated_at` would throw "Invalid time value".
+ *
+ * `eventCreatedAt` is used as a fallback for a missing/invalid `updated_at` so
+ * a note can always be rendered and sorted.
+ */
+function parseNoteData(raw: unknown, eventCreatedAt: number): NoteData | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return undefined;
+  }
+  const record = raw as Record<string, unknown>;
+
+  const hasTitle = typeof record.title === 'string';
+  const hasContent = typeof record.content === 'string';
+  // A notebook note always carries at least one of these; a payload with
+  // neither is another app's app-data and is ignored.
+  if (!hasTitle && !hasContent) {
+    return undefined;
+  }
+
+  const updatedAt =
+    typeof record.updated_at === 'number' && Number.isFinite(record.updated_at)
+      ? record.updated_at
+      : eventCreatedAt;
+
+  const followUp = record.follow_up_date;
+  const followUpDate =
+    typeof followUp === 'number' && Number.isFinite(followUp) && followUp > 0
+      ? followUp
+      : undefined;
+
+  return {
+    title: hasTitle ? (record.title as string) : '',
+    content: hasContent ? (record.content as string) : '',
+    updated_at: updatedAt,
+    ...(followUpDate !== undefined ? { follow_up_date: followUpDate } : {}),
+  };
+}
+
+/**
  * Safety timeout for the relay read. If a relay socket hangs without ever
  * responding, we abandon the fetch and fall back to the local cache rather
  * than leaving the notebook stuck on its loading state.
@@ -131,7 +177,8 @@ export function useEncryptedNotes(): {
 
         try {
           const plaintext = await user.signer.nip44.decrypt(user.pubkey, event.content);
-          const data: NoteData = JSON.parse(plaintext);
+          const data = parseNoteData(JSON.parse(plaintext), event.created_at);
+          if (!data) continue;
           const tags = event.tags
             .filter(([name]) => name === 't')
             .map(([, value]) => value);
