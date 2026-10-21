@@ -17,7 +17,7 @@ This project is a Nostr client application built with React 19.x, TailwindCSS 4.
 
 - `/src/components/` — UI components. `ui/` holds shadcn/ui primitives; `auth/` holds login components (`LoginArea`, `AuthDialog`, `AccountSwitcher`).
 - `/src/hooks/` — custom hooks. Discover the full set with `ls src/hooks/`. Key ones: `useNostr`, `useAuthor`, `useCurrentUser`, `useNostrPublish`, `useUploadFile`, `useAppContext`, `useTheme`, `useToast`, `useLoggedInAccounts`, `useLoginActions`, `useIsMobile`.
-- `/src/pages/` — page components wired into React Router (`Index`, `NotFound`, `NIP19Page`).
+- `/src/pages/` — page components wired into React Router (`Index`, `NotFound`, `NIP19Page`, which currently returns 404 for every identifier).
 - `/src/lib/` — utility functions and shared logic.
 - `/src/contexts/` — React context providers (`AppContext`).
 - `/src/test/` — testing utilities including the `TestApp` wrapper.

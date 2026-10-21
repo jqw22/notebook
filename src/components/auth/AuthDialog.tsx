@@ -521,6 +521,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
               <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
                 <p className="text-xs text-amber-900 dark:text-amber-300">
                   This key is your only way to access your account. If you lose it, you lose the account.
+                  It is also stored unencrypted in this browser to keep you logged in; for stronger
+                  protection, move it into a signer extension or app and log in with that.
                 </p>
               </div>
 
@@ -759,6 +761,13 @@ const NsecLoginForm: React.FC<NsecLoginFormProps> = ({
       </DropdownMenu>
     </div>
     {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+    {loginInput.trim().startsWith('nsec1') && (
+      <p className="text-xs text-amber-900 dark:text-amber-300 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
+        Your secret key will be stored unencrypted in this browser, and anyone
+        who gets it can read all your notes. A signer extension (such as Alby
+        or nos2x) or a bunker / signer app keeps the key out of the browser.
+      </p>
+    )}
 
     <Button
       type="submit"
