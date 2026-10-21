@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
 import { LegacyKeyNotice } from '@/components/auth/LegacyKeyNotice';
+import { ExtensionAccountSync } from '@/components/auth/ExtensionAccountSync';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
@@ -55,6 +56,7 @@ export function App() {
             <NostrProvider>
               <NostrSync />
               <LegacyKeyNotice />
+              <ExtensionAccountSync />
               <TooltipProvider>
                 <Toaster />
                 <Suspense>
