@@ -107,8 +107,6 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     if (!currentLogin) return undefined;
     try {
       switch (currentLogin.type) {
-        case 'nsec':
-          return NUser.fromNsecLogin(currentLogin).signer;
         case 'bunker':
           return NUser.fromBunkerLogin(currentLogin, pool).signer;
         case 'extension':

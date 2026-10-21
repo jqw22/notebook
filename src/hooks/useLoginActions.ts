@@ -10,6 +10,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 
 // NOTE: This file should not be edited except for adding new login methods.
+// There is deliberately no nsec login: a secret key entered here would be
+// stored unencrypted in localStorage. Use an extension or a remote signer.
 
 export type { NostrConnectParams, NostrConnectStatus };
 export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/react/login';
@@ -30,11 +32,6 @@ export function useLoginActions() {
   };
 
   return {
-    // Login with a Nostr secret key
-    nsec(nsec: string): void {
-      const login = NLogin.fromNsec(nsec);
-      addAndActivate(login);
-    },
     // Login with a NIP-46 "bunker://" URI
     async bunker(uri: string): Promise<void> {
       const login = await NLogin.fromBunker(uri, nostr);

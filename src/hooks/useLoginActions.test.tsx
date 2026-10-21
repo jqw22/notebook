@@ -1,25 +1,40 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { generateSecretKey, nip19, getPublicKey } from 'nostr-tools';
+import { generateSecretKey, getPublicKey } from 'nostr-tools';
 import { useNostrLogin } from '@nostrify/react/login';
 
 import { TestApp } from '@/test/TestApp';
 import { useLoginActions } from './useLoginActions';
 
-/**
- * Regression test: adding a second login while one is already logged in
- * must switch the current user to the new login (logins[0]). Without the
- * fix, addLogin appends the new login to the end of the array and
- * logins[0] remains the previously-logged-in user — leading to the
- * destructive bug where the signup profile step signs kind 0 metadata
- * with the *original* user's signer, overwriting their profile.
- */
-describe('useLoginActions auto-switch', () => {
-  it('promotes the newly added nsec login to logins[0]', async () => {
-    const nsec1 = nip19.nsecEncode(generateSecretKey());
-    const sk2 = generateSecretKey();
-    const nsec2 = nip19.nsecEncode(sk2);
-    const pubkey2 = getPublicKey(sk2);
+/** Stub a NIP-07 extension at `window.nostr` that reports `pubkey`. */
+function stubExtension(pubkey: string) {
+  (globalThis as { nostr?: unknown }).nostr = {
+    getPublicKey: async () => pubkey,
+  };
+}
+
+afterEach(() => {
+  delete (globalThis as { nostr?: unknown }).nostr;
+  localStorage.clear();
+});
+
+describe('useLoginActions', () => {
+  it('has no nsec login method', async () => {
+    const { result } = renderHook(() => useLoginActions(), { wrapper: TestApp });
+    // NostrLoginProvider renders null while it reads logins from storage.
+    await waitFor(() => expect(result.current).not.toBeNull());
+    expect(result.current).not.toHaveProperty('nsec');
+  });
+
+  /**
+   * Regression test: adding a second login while one is already logged in
+   * must switch the current user to the new login (logins[0]). Without the
+   * fix, addLogin appends the new login to the end of the array and
+   * logins[0] remains the previously-logged-in user.
+   */
+  it('promotes the newly added login to logins[0]', async () => {
+    const pubkey1 = getPublicKey(generateSecretKey());
+    const pubkey2 = getPublicKey(generateSecretKey());
 
     const { result } = renderHook(
       () => ({
@@ -33,15 +48,12 @@ describe('useLoginActions auto-switch', () => {
     // so wait for the provider to mount.
     await waitFor(() => expect(result.current).not.toBeNull());
 
-    act(() => {
-      result.current.actions.nsec(nsec1);
-    });
-
+    stubExtension(pubkey1);
+    await act(() => result.current.actions.extension());
     expect(result.current.login.logins).toHaveLength(1);
 
-    act(() => {
-      result.current.actions.nsec(nsec2);
-    });
+    stubExtension(pubkey2);
+    await act(() => result.current.actions.extension());
 
     expect(result.current.login.logins).toHaveLength(2);
     // The newly added login MUST be at index 0 (current user).

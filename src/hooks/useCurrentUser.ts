@@ -10,8 +10,8 @@ export function useCurrentUser() {
 
   const loginToUser = useCallback((login: NLoginType): NUser  => {
     switch (login.type) {
-      case 'nsec': // Nostr login with secret key
-        return NUser.fromNsecLogin(login);
+      // 'nsec' logins are not supported: the key would sit unencrypted in
+      // localStorage. LegacyKeyNotice removes any left from older versions.
       case 'bunker': // Nostr login with NIP-46 "bunker://" URI
         return NUser.fromBunkerLogin(login, nostr);
       case 'extension': // Nostr login with NIP-07 browser extension

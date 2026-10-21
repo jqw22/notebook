@@ -57,7 +57,7 @@ export function LoginArea({ className }: LoginAreaProps) {
           onClick={handleJoin}
           className="flex items-center gap-2 px-5 py-2 rounded-full bg-primary text-primary-foreground font-medium transition-all hover:bg-primary/90 animate-scale-in"
         >
-          <span className="truncate">Join</span>
+          <span className="truncate">Log in</span>
         </Button>
       )}
 
