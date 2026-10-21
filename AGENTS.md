@@ -74,7 +74,7 @@ Kinds below 1000 are "legacy"; their storage behavior is per-kind (e.g. kind 1 i
 
 ### Nostr Security Model
 
-**CRITICAL:** Nostr private keys (`nsec`) are stored **in plaintext in `localStorage`**. Any JavaScript running on the origin can steal them. A single XSS = permanent, unrecoverable key theft across every Nostr client the user ever touches. **Treat XSS mitigation as the top-priority security concern.**
+**CRITICAL:** This app does **not** accept `nsec` logins, because Nostrify would store the secret key **in plaintext in `localStorage`**. Users log in only with a NIP-07 extension or a NIP-46 remote signer; `LegacyKeyNotice` removes any nsec login left by older versions. **Never add an nsec login path back.** XSS is still the top-priority security concern: injected script can call the user's signer to sign or decrypt on their behalf.
 
 - **Never** use `dangerouslySetInnerHTML`, `innerHTML`, or `document.write` with event data, URL params, or other untrusted strings.
 - **CSP is defense-in-depth**, not primary defense. `index.html` ships a restrictive CSP (`script-src 'self'`, `default-src 'none'`). Never relax it with `'unsafe-eval'`, `'unsafe-inline'` on `script-src`, or wildcard sources.
@@ -192,7 +192,7 @@ export function MyComponent() {
 
 ### Nostr Login
 
-Use the `LoginArea` component (already in the project). It renders a single "Join" button when logged out (opens an `AuthDialog` supporting signup, extension, nsec, and remote signer) and becomes an account switcher when logged in. **Do not wrap it in conditional logic.**
+Use the `LoginArea` component (already in the project). It renders a single "Log in" button when logged out (opens an `AuthDialog` supporting a NIP-07 extension and NIP-46 remote signers, with links to get a signer) and becomes an account switcher when logged in. **Do not wrap it in conditional logic.**
 
 ```tsx
 import { LoginArea } from '@/components/auth/LoginArea';

@@ -10,6 +10,7 @@ import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
+import { LegacyKeyNotice } from '@/components/auth/LegacyKeyNotice';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
@@ -53,6 +54,7 @@ export function App() {
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
               <NostrSync />
+              <LegacyKeyNotice />
               <TooltipProvider>
                 <Toaster />
                 <Suspense>

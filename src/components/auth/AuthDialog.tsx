@@ -1,25 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  Download,
-  Upload,
-  Eye,
-  EyeOff,
-  Key,
-  Loader2,
-  FileUp,
-  ExternalLink,
-} from 'lucide-react';
+import { Loader2, ExternalLink, Puzzle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { toast } from '@/hooks/useToast';
 import {
   useLoginActions,
   generateNostrConnectParams,
@@ -27,20 +10,24 @@ import {
   type NostrConnectParams,
   type NostrConnectStatus,
 } from '@/hooks/useLoginActions';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
-import { useUploadFile } from '@/hooks/useUploadFile';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 
 interface AuthDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type Step = 'welcome' | 'generate' | 'secure' | 'profile' | 'login';
-
-const validateNsec = (nsec: string) => /^nsec1[a-zA-Z0-9]{58}$/.test(nsec);
+// Secret keys are never accepted: this app only signs through a NIP-07
+// extension or a NIP-46 remote signer, so no key is ever stored in the browser.
+const looksLikeNsec = (value: string) => value.startsWith('nsec1');
 const validateBunkerUri = (uri: string) => uri.startsWith('bunker://');
+
+/** Signers we point new users to. Hard-coded https links only. */
+const SIGNER_LINKS = [
+  { name: 'Alby', href: 'https://getalby.com/', kind: 'extension' },
+  { name: 'nos2x', href: 'https://github.com/fiatjaf/nos2x', kind: 'extension' },
+  { name: 'Amber', href: 'https://github.com/greenart7c3/Amber', kind: 'Android app' },
+  { name: 'nsec.app', href: 'https://nsec.app/', kind: 'bunker' },
+] as const;
 
 const connectStatusLabel = (status: NostrConnectStatus | null): string => {
   switch (status) {
@@ -59,37 +46,18 @@ function isMobileDevice(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
-/** Download an nsec to a text file — same behavior as the previous SignupDialog. */
-function downloadNsecFile(nsec: string) {
-  const decoded = nip19.decode(nsec);
-  if (decoded.type !== 'nsec') throw new Error('Invalid nsec key');
-  const pubkey = getPublicKey(decoded.data);
-  const npub = nip19.npubEncode(pubkey);
-  const filename = `nostr-${location.hostname.replaceAll(/\./g, '-')}-${npub.slice(5, 9)}.nsec.txt`;
-
-  const blob = new Blob([nsec], { type: 'text/plain; charset=utf-8' });
-  const url = globalThis.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  globalThis.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
+/** Whether a NIP-07 provider has been injected at `window.nostr`. */
+function hasNip07Extension(): boolean {
+  return typeof window !== 'undefined' && 'nostr' in window && !!(window as { nostr?: unknown }).nostr;
 }
 
 const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
-  const [step, setStep] = useState<Step>('welcome');
+  // Extension state
+  const [isExtensionLoggingIn, setIsExtensionLoggingIn] = useState(false);
+  const [extensionError, setExtensionError] = useState('');
 
-  // Signup state
-  const [nsec, setNsec] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [profileData, setProfileData] = useState({ name: '', about: '', picture: '' });
-
-  // Login state — single input accepting either an nsec or a bunker URI.
-  const [loginInput, setLoginInput] = useState('');
+  // Bunker state — a single input accepting a bunker:// URI.
+  const [bunkerInput, setBunkerInput] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -102,7 +70,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // hasn't launched the signer yet (or they canceled).
   const [connectStatus, setConnectStatus] = useState<NostrConnectStatus | null>(null);
   // Whether the user has launched the signer app. Until then we show the
-  // login form; once launched we swap in the progress view.
+  // login options; once launched we swap in the progress view.
   const [hasOpenedSigner, setHasOpenedSigner] = useState(false);
 
   const login = useLoginActions();
@@ -120,11 +88,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
-  const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
-  const { user: currentUser } = useCurrentUser();
-  const avatarFileInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Reset state when the dialog closes.
@@ -135,14 +98,11 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (!isOpen) {
       /* eslint-disable react-hooks/set-state-in-effect */
-      setStep('welcome');
-      setNsec('');
-      setLoginInput('');
-      setShowKey(false);
-      setIsGenerating(false);
+      setIsExtensionLoggingIn(false);
+      setExtensionError('');
+      setBunkerInput('');
       setIsLoggingIn(false);
       setLoginError('');
-      setProfileData({ name: '', about: '', picture: '' });
       setNostrConnectParams(null);
       setNostrConnectUri('');
       setConnectError(null);
@@ -239,444 +199,160 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Signup: generate a key with a brief spinner for feedback.
-  const generateKey = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      const sk = generateSecretKey();
-      setNsec(nip19.nsecEncode(sk));
-      setStep('secure');
-      setIsGenerating(false);
-    }, 750);
-  };
-
-  // Signup: download the nsec to a file and move on to the profile step.
-  const downloadAndProceed = () => {
+  // Log in with a NIP-07 browser extension.
+  const handleExtensionLogin = async () => {
+    setIsExtensionLoggingIn(true);
+    setExtensionError('');
     try {
-      downloadNsecFile(nsec);
-      login.nsec(nsec);
-      setStep('profile');
-    } catch {
-      toast({
-        title: 'Download failed',
-        description: 'Could not download the key file. Please copy it manually.',
-        variant: 'destructive',
-      });
+      await login.extension();
+      onClose();
+    } catch (e) {
+      setExtensionError(e instanceof Error ? e.message : 'Extension login failed.');
+      setIsExtensionLoggingIn(false);
     }
   };
 
-  // Login: submit the entered value — either an nsec or a bunker:// URI.
-  const handleLogin = () => {
-    const value = loginInput.trim();
+  // Log in with a NIP-46 bunker:// URI.
+  const handleBunkerLogin = () => {
+    const value = bunkerInput.trim();
     if (!value) {
-      setLoginError('Enter your secret key or bunker URI.');
+      setLoginError('Enter a bunker://… URI.');
       return;
     }
 
-    if (validateBunkerUri(value)) {
-      setIsLoggingIn(true);
-      setLoginError('');
-      login
-        .bunker(value)
-        .then(() => onClose())
-        .catch(() => {
-          setLoginError('Failed to connect. Check the bunker URI.');
-          setIsLoggingIn(false);
-        });
+    if (looksLikeNsec(value)) {
+      // Don't keep the secret key in component state any longer than needed.
+      setBunkerInput('');
+      setLoginError(
+        "Secret keys (nsec) aren't accepted. Import your key into a signer extension or app, then log in with that.",
+      );
       return;
     }
 
-    if (!validateNsec(value)) {
-      setLoginError('Enter a valid nsec1… key or bunker://… URI.');
+    if (!validateBunkerUri(value)) {
+      setLoginError('Enter a valid bunker://… URI.');
       return;
     }
 
     setIsLoggingIn(true);
     setLoginError('');
-    // Timeout gives the UI a chance to repaint before the synchronous login.
-    setTimeout(() => {
-      try {
-        login.nsec(value);
-        onClose();
-      } catch {
-        setLoginError("Couldn't log in with this key.");
+    login
+      .bunker(value)
+      .then(() => onClose())
+      .catch(() => {
+        setLoginError('Failed to connect. Check the bunker URI.');
         setIsLoggingIn(false);
-      }
-    }, 50);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content && validateNsec(content.trim())) {
-        setLoginInput(content.trim());
-        setLoginError('');
-      } else {
-        setLoginError('File does not contain a valid secret key.');
-      }
-    };
-    reader.onerror = () => setLoginError('Failed to read file.');
-    reader.readAsText(file);
-  };
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Please select an image.', variant: 'destructive' });
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast({ title: 'Image too large (max 5MB).', variant: 'destructive' });
-      return;
-    }
-
-    try {
-      const tags = await uploadFile(file);
-      const url = tags[0]?.[1];
-      if (url) setProfileData((prev) => ({ ...prev, picture: url }));
-    } catch {
-      toast({ title: 'Upload failed.', variant: 'destructive' });
-    }
-  };
-
-  const finishSignup = async (skipProfile = false) => {
-    try {
-      if (!skipProfile && (profileData.name || profileData.about || profileData.picture)) {
-        // Defensive guard: only publish kind 0 if the current signer is
-        // the freshly generated key. If the auto-switch ever fails (e.g.
-        // a regression in useLoginActions), publishing here would sign
-        // with the *previous* user's signer and overwrite their kind 0
-        // metadata — destroying their profile. Refuse rather than risk
-        // it.
-        let expectedPubkey: string | null = null;
-        try {
-          const decoded = nip19.decode(nsec);
-          if (decoded.type === 'nsec') {
-            expectedPubkey = getPublicKey(decoded.data);
-          }
-        } catch {
-          // fall through to the mismatch branch below
-        }
-
-        if (!expectedPubkey || currentUser?.pubkey !== expectedPubkey) {
-          toast({
-            title: 'Profile not saved',
-            description:
-              'The new account is not active yet, so your profile was not published (this prevents overwriting another account). Try again from your profile settings.',
-            variant: 'destructive',
-          });
-          return;
-        }
-
-        const metadata: Record<string, string> = {};
-        if (profileData.name) metadata.name = profileData.name;
-        if (profileData.about) metadata.about = profileData.about;
-        if (profileData.picture) metadata.picture = profileData.picture;
-        await publishEvent({ kind: 0, content: JSON.stringify(metadata) });
-      }
-    } catch {
-      toast({
-        title: 'Profile setup failed',
-        description: 'Your account was created but the profile could not be saved. You can update it later.',
-        variant: 'destructive',
       });
-    } finally {
-      onClose();
-    }
   };
 
-  const getTitle = () => {
-    switch (step) {
-      case 'welcome':
-        return 'Welcome';
-      case 'generate':
-        return 'Create a Nostr account';
-      case 'secure':
-        return 'Save your key';
-      case 'profile':
-        return 'Your profile';
-      case 'login':
-        return 'Log in';
-    }
-  };
-
-  // Once the user launches the signer app we replace the login form with a
-  // progress view so they see feedback while the handshake completes.
-  const showProgressView = hasOpenedSigner;
+  const extensionAvailable = hasNip07Extension();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] sm:max-w-sm max-h-[90dvh] p-0 gap-0 overflow-hidden rounded-2xl overflow-y-auto">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle className="text-lg font-semibold leading-none tracking-tight text-center">
-            {getTitle()}
+            Log in
           </DialogTitle>
         </DialogHeader>
 
         <div className="px-6 pb-6 pt-4 space-y-5">
-          {/* Welcome step — the unified entry point. */}
-          {step === 'welcome' && (
-            <div className="space-y-5 text-center">
-              <div className="flex size-32 text-6xl bg-primary/10 rounded-full items-center justify-center mx-auto">
-                🔑
-              </div>
-
-              <div className="space-y-2">
-                <Button onClick={() => setStep('generate')} className="w-full h-12 rounded-full">
-                  Create a new Nostr account
-                </Button>
-                <Button
-                  variant="link"
-                  onClick={() => setStep('login')}
-                  className="w-full text-muted-foreground"
-                >
-                  Log in to an existing account
-                </Button>
-              </div>
+          {connectError ? (
+            <div className="flex flex-col items-center space-y-3 py-4">
+              <p className="text-sm text-destructive text-center">{connectError}</p>
+              <Button variant="outline" onClick={handleConnectRetry} className="rounded-full">
+                Try again
+              </Button>
             </div>
-          )}
-
-          {/* Generate step. */}
-          {step === 'generate' && (
-            <div className="space-y-5 text-center">
-              <div className="relative w-20 h-20 mx-auto">
-                {isGenerating ? (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="w-12 h-12 text-primary animate-spin" />
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Key className="w-8 h-8 text-primary" />
-                  </div>
+          ) : hasOpenedSigner ? (
+            <div className="flex flex-col items-center space-y-4 py-6 w-full">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground text-center min-h-[1.25rem]">
+                {connectStatusLabel(connectStatus) || 'Waiting for your signer…'}
+              </p>
+              <button
+                type="button"
+                onClick={handleConnectRetry}
+                className="text-sm text-primary hover:underline underline-offset-4 font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* NIP-07 browser extension. */}
+              <div className="space-y-2">
+                <Button
+                  onClick={handleExtensionLogin}
+                  disabled={!extensionAvailable || isExtensionLoggingIn}
+                  className="w-full h-12 rounded-full"
+                >
+                  {isExtensionLoggingIn ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Puzzle className="w-4 h-4 mr-2" />
+                  )}
+                  {isExtensionLoggingIn ? 'Logging in…' : 'Log in with extension'}
+                </Button>
+                {!extensionAvailable && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    No signer extension found in this browser.
+                  </p>
+                )}
+                {extensionError && (
+                  <p className="text-sm text-destructive text-center" role="alert">
+                    {extensionError}
+                  </p>
                 )}
               </div>
 
-              <div className="space-y-1">
-                <p className="font-medium">
-                  {isGenerating ? 'Creating your key…' : 'Your key is your identity'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {isGenerating
-                    ? 'This only takes a moment.'
-                    : "We'll generate a secret key just for you. Keep it safe — it's the only way to log in."}
-                </p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                or use a remote signer
+                <div className="h-px flex-1 bg-border" />
               </div>
 
-              {!isGenerating && (
-                <Button onClick={generateKey} className="w-full h-12 rounded-full">
-                  Generate key
-                </Button>
-              )}
+              {/* NIP-46 remote signer: bunker URI or nostrconnect. */}
+              <BunkerLoginForm
+                bunkerInput={bunkerInput}
+                setBunkerInput={setBunkerInput}
+                loginError={loginError}
+                setLoginError={setLoginError}
+                isLoggingIn={isLoggingIn}
+                onSubmit={handleBunkerLogin}
+              />
 
-              <button
-                onClick={() => setStep('welcome')}
-                className="text-sm text-muted-foreground hover:text-foreground"
+              <Button
+                variant="outline"
+                onClick={handleOpenSignerApp}
+                className="w-full rounded-full"
               >
-                Back
-              </button>
-            </div>
-          )}
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open signer app
+              </Button>
 
-          {/* Secure step — show + download nsec. */}
-          {step === 'secure' && (
-            <div className="space-y-4">
-              <div className="flex size-14 bg-primary/10 rounded-full items-center justify-center mx-auto">
-                <Key className="w-7 h-7 text-primary" />
-              </div>
-
-              <p className="text-sm text-muted-foreground text-center">
-                Store your key somewhere safe. You'll need it to log in again.
-              </p>
-
-              <div className="relative">
-                <Input
-                  type={showKey ? 'text' : 'password'}
-                  value={nsec}
-                  readOnly
-                  className="pr-10 font-mono"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                  onClick={() => setShowKey(!showKey)}
-                >
-                  {showKey ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </Button>
-              </div>
-
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
-                <p className="text-xs text-amber-900 dark:text-amber-300">
-                  This key is your only way to access your account. If you lose it, you lose the account.
-                  It is also stored unencrypted in this browser to keep you logged in; for stronger
-                  protection, move it into a signer extension or app and log in with that.
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
+                <p className="text-xs font-medium">New to Nostr? Get a signer first:</p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {SIGNER_LINKS.map((link) => (
+                    <li key={link.name}>
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline underline-offset-4"
+                      >
+                        {link.name}
+                      </a>{' '}
+                      ({link.kind})
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  Your key stays in the signer. This app never sees or stores it.
                 </p>
               </div>
-
-              <Button onClick={downloadAndProceed} className="w-full h-12 rounded-full">
-                <Download className="w-4 h-4 mr-2" />
-                Download &amp; continue
-              </Button>
-            </div>
-          )}
-
-          {/* Profile step — optional metadata. */}
-          {step === 'profile' && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Tell others a bit about yourself (optional).
-              </p>
-
-              <div className={`space-y-4 ${isPublishing ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="space-y-1.5">
-                  <label htmlFor="profile-name" className="text-sm font-medium">
-                    Display name
-                  </label>
-                  <Input
-                    id="profile-name"
-                    value={profileData.name}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, name: e.target.value }))
-                    }
-                    placeholder="Your name"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="profile-about" className="text-sm font-medium">
-                    Bio
-                  </label>
-                  <Textarea
-                    id="profile-about"
-                    value={profileData.about}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, about: e.target.value }))
-                    }
-                    placeholder="A little about you…"
-                    className="resize-none"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="profile-picture" className="text-sm font-medium">
-                    Avatar
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="profile-picture"
-                      value={profileData.picture}
-                      onChange={(e) =>
-                        setProfileData((prev) => ({ ...prev, picture: e.target.value }))
-                      }
-                      placeholder="https://…"
-                      className="flex-1"
-                    />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      ref={avatarFileInputRef}
-                      onChange={handleAvatarUpload}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => avatarFileInputRef.current?.click()}
-                      disabled={isUploading}
-                      title="Upload avatar"
-                    >
-                      {isUploading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Upload className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Button
-                  onClick={() => finishSignup(false)}
-                  disabled={isPublishing}
-                  className="w-full h-12 rounded-full"
-                >
-                  {isPublishing ? 'Saving…' : 'Finish'}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => finishSignup(true)}
-                  disabled={isPublishing}
-                  className="w-full rounded-full"
-                >
-                  Skip for now
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Login step. */}
-          {step === 'login' && (
-            <div className="space-y-4">
-              {connectError ? (
-                <div className="flex flex-col items-center space-y-3 py-4">
-                  <p className="text-sm text-destructive text-center">{connectError}</p>
-                  <Button variant="outline" onClick={handleConnectRetry} className="rounded-full">
-                    Try again
-                  </Button>
-                </div>
-              ) : showProgressView ? (
-                <div className="flex flex-col items-center space-y-4 py-6 w-full">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground text-center min-h-[1.25rem]">
-                    {connectStatusLabel(connectStatus) || 'Waiting for your signer…'}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleConnectRetry}
-                    className="text-sm text-primary hover:underline underline-offset-4 font-medium"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <NsecLoginForm
-                  loginInput={loginInput}
-                  setLoginInput={setLoginInput}
-                  loginError={loginError}
-                  setLoginError={setLoginError}
-                  isLoggingIn={isLoggingIn}
-                  onSubmit={handleLogin}
-                  onFileChange={handleFileUpload}
-                  onOpenSignerApp={handleOpenSignerApp}
-                  fileInputRef={fileInputRef}
-                />
-              )}
-
-              {!connectError && !showProgressView && (
-                <button
-                  onClick={() => setStep('welcome')}
-                  className="w-full text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Back
-                </button>
-              )}
-            </div>
+            </>
           )}
         </div>
       </DialogContent>
@@ -684,29 +360,23 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   );
 };
 
-/** Shared login input (nsec or bunker URI) + submit + actions dropdown. */
-interface NsecLoginFormProps {
-  loginInput: string;
-  setLoginInput: (v: string) => void;
+/** Bunker URI input + submit. */
+interface BunkerLoginFormProps {
+  bunkerInput: string;
+  setBunkerInput: (v: string) => void;
   loginError: string;
   setLoginError: (v: string) => void;
   isLoggingIn: boolean;
   onSubmit: () => void;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onOpenSignerApp: () => void;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
-const NsecLoginForm: React.FC<NsecLoginFormProps> = ({
-  loginInput,
-  setLoginInput,
+const BunkerLoginForm: React.FC<BunkerLoginFormProps> = ({
+  bunkerInput,
+  setBunkerInput,
   loginError,
   setLoginError,
   isLoggingIn,
   onSubmit,
-  onFileChange,
-  onOpenSignerApp,
-  fileInputRef,
 }) => (
   <form
     onSubmit={(e) => {
@@ -715,66 +385,24 @@ const NsecLoginForm: React.FC<NsecLoginFormProps> = ({
     }}
     className="space-y-3"
   >
-    <div className="relative">
-      <Input
-        type="password"
-        value={loginInput}
-        onChange={(e) => {
-          setLoginInput(e.target.value);
-          if (loginError) setLoginError('');
-        }}
-        placeholder="nsec1… or bunker://…"
-        autoComplete="off"
-        className={`pr-10 ${
-          loginError ? 'border-destructive focus-visible:ring-destructive' : ''
-        }`}
-      />
-      <input
-        type="file"
-        accept=".txt"
-        className="hidden"
-        ref={fileInputRef}
-        onChange={onFileChange}
-      />
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-            title="More login options"
-          >
-            <Upload className="h-4 w-4 text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
-            <FileUp className="h-4 w-4" />
-            Select key file
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenSignerApp}>
-            <ExternalLink className="h-4 w-4" />
-            Open signer app
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+    <Input
+      value={bunkerInput}
+      onChange={(e) => {
+        setBunkerInput(e.target.value);
+        if (loginError) setLoginError('');
+      }}
+      placeholder="bunker://…"
+      autoComplete="off"
+      className={loginError ? 'border-destructive focus-visible:ring-destructive' : ''}
+    />
     {loginError && <p className="text-sm text-destructive">{loginError}</p>}
-    {loginInput.trim().startsWith('nsec1') && (
-      <p className="text-xs text-amber-900 dark:text-amber-300 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-3">
-        Your secret key will be stored unencrypted in this browser, and anyone
-        who gets it can read all your notes. A signer extension (such as Alby
-        or nos2x) or a bunker / signer app keeps the key out of the browser.
-      </p>
-    )}
 
     <Button
       type="submit"
-      disabled={isLoggingIn || !loginInput.trim()}
+      disabled={isLoggingIn || !bunkerInput.trim()}
       className="w-full rounded-full"
     >
-      {isLoggingIn ? 'Logging in…' : 'Log in'}
+      {isLoggingIn ? 'Connecting…' : 'Connect bunker'}
     </Button>
   </form>
 );
