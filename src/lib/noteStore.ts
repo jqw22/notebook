@@ -92,6 +92,25 @@ export function mergeEvents(...sets: NostrEvent[][]): NostrEvent[] {
   return [...byAddress.values()];
 }
 
+/**
+ * Local events that relays don't have yet: notes (or tombstones) that are
+ * missing from `remote` or newer than the copy there. These are saves made
+ * while offline and deletions a relay missed, and should be re-published.
+ */
+export function findUnsynced(local: NostrEvent[], remote: NostrEvent[]): NostrEvent[] {
+  const remoteByAddress = new Map<string, NostrEvent>();
+  for (const event of mergeEvents(remote)) {
+    const address = eventAddress(event);
+    if (address !== undefined) remoteByAddress.set(address, event);
+  }
+  return mergeEvents(local).filter((event) => {
+    const address = eventAddress(event);
+    if (address === undefined) return false;
+    const onRelay = remoteByAddress.get(address);
+    return !onRelay || event.created_at > onRelay.created_at;
+  });
+}
+
 /** Read every cached encrypted event authored by `pubkey`. Never throws. */
 export async function getStoredEvents(pubkey: string): Promise<NostrEvent[]> {
   try {

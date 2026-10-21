@@ -45,7 +45,13 @@ Notes are "deleted" by publishing a new kind 30078 event with the same `d` tag a
 ### Query
 
 ```
-{ kinds: [30078], authors: [<user_pubkey>], limit: 200 }
+{ kinds: [30078], authors: [<user_pubkey>], limit: 200, until?: <oldest created_at so far> }
 ```
+
+Clients page backwards with `until` until a page comes back short, so notebooks larger than one page load in full.
+
+### Offline writes
+
+Every save and deletion is signed and stored locally before it is published. After each successful relay fetch, any local event that relays are missing (or hold an older version of) is re-published, so saves made offline and deletions a relay missed eventually reach the relays.
 
 Tags (`t`) are stored in cleartext to enable relay-side filtering by tag, at the cost of leaking tag metadata to relays. Content remains fully encrypted.

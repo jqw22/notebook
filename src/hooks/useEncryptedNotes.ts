@@ -1,8 +1,8 @@
 import { useNostr } from '@nostrify/react';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
-import type { NostrEvent } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter, NPool } from '@nostrify/nostrify';
 
-import { getStoredEvents, mergeEvents, requestPersistentStorage, storeEvents } from '@/lib/noteStore';
+import { findUnsynced, getStoredEvents, mergeEvents, requestPersistentStorage, storeEvents } from '@/lib/noteStore';
 import { useCurrentUser } from './useCurrentUser';
 
 /** The decrypted payload stored in the event content. */
@@ -12,6 +12,16 @@ export interface NoteData {
   updated_at: number;
   /** Optional follow-up date as a Unix timestamp (seconds). */
   follow_up_date?: number;
+}
+
+/** Result of a save or delete. */
+export interface WriteResult {
+  event: NostrEvent;
+  /**
+   * False when no relay accepted the event. It is kept on this device and
+   * re-published on the next successful sync.
+   */
+  published: boolean;
 }
 
 /** A fully resolved encrypted note. */
@@ -82,11 +92,97 @@ export function parseNoteData(raw: unknown, eventCreatedAt: number): NoteData | 
 }
 
 /**
- * Safety timeout for the relay read. If a relay socket hangs without ever
- * responding, we abandon the fetch and fall back to the local cache rather
- * than leaving the notebook stuck on its loading state.
+ * Safety timeout for each page of the relay read. If a relay socket hangs
+ * without ever responding, we abandon the fetch and fall back to the local
+ * cache rather than leaving the notebook stuck on its loading state. It is
+ * per page so a large notebook isn't cut off just for taking several pages.
  */
 const RELAY_FETCH_TIMEOUT_MS = 8000;
+
+/** Events requested per relay page. */
+const PAGE_SIZE = 200;
+
+/**
+ * Upper bound on pages, so a relay that ignores `until` can't loop forever.
+ * 50 pages is 10,000 events.
+ */
+const MAX_PAGES = 50;
+
+/** Timeout for publishing a single event. */
+const PUBLISH_TIMEOUT_MS = 5000;
+
+/**
+ * Fetch every kind 30078 event by `pubkey`, paging backwards with `until`.
+ *
+ * A single `limit` query would silently drop older notes once the user has
+ * more than a page of events (other apps' app data and tombstones count
+ * toward the limit too).
+ */
+export async function fetchAllNoteEvents(
+  nostr: NPool,
+  pubkey: string,
+  signal: AbortSignal,
+): Promise<NostrEvent[]> {
+  const byId = new Map<string, NostrEvent>();
+  let until: number | undefined;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const filter: NostrFilter = { kinds: [NOTE_KIND], authors: [pubkey], limit: PAGE_SIZE };
+    if (until !== undefined) filter.until = until;
+
+    const events = await queryWithTimeout(nostr, filter, signal);
+
+    let added = 0;
+    let oldest = Infinity;
+    for (const event of events) {
+      if (!byId.has(event.id)) {
+        byId.set(event.id, event);
+        added++;
+      }
+      oldest = Math.min(oldest, event.created_at);
+    }
+
+    // A short page means the relays have nothing older. `until` is
+    // inclusive, so a page of only already-seen events means the same.
+    if (events.length < PAGE_SIZE || added === 0) break;
+    until = oldest;
+  }
+
+  return [...byId.values()];
+}
+
+/** Run one relay query, aborted by `signal` or after RELAY_FETCH_TIMEOUT_MS. */
+async function queryWithTimeout(
+  nostr: NPool,
+  filter: NostrFilter,
+  signal: AbortSignal,
+): Promise<NostrEvent[]> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal.aborted) {
+    controller.abort();
+  } else {
+    signal.addEventListener('abort', abort, { once: true });
+  }
+  const timer = setTimeout(abort, RELAY_FETCH_TIMEOUT_MS);
+  try {
+    return await nostr.query([filter], { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', abort);
+  }
+}
+
+/** Publish an event, reporting whether any relay accepted it. Never throws. */
+async function tryPublish(nostr: NPool, event: NostrEvent): Promise<boolean> {
+  try {
+    await nostr.event(event, { signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+    return true;
+  } catch (error) {
+    console.warn('Publish failed; kept locally for the next sync:', error);
+    return false;
+  }
+}
 
 /**
  * Query key for the user's encrypted notes.
@@ -113,8 +209,8 @@ export interface NotesResult {
 /** Fetch, decrypt, create, update, and delete NIP-44 encrypted private notes (kind 30078). */
 export function useEncryptedNotes(): {
   notesQuery: UseQueryResult<NotesResult>;
-  saveNote: UseMutationResult<NostrEvent, Error, SaveNoteParams>;
-  deleteNote: UseMutationResult<NostrEvent, Error, string>;
+  saveNote: UseMutationResult<WriteResult, Error, SaveNoteParams>;
+  deleteNote: UseMutationResult<WriteResult, Error, string>;
 } {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
@@ -135,39 +231,34 @@ export function useEncryptedNotes(): {
       // Offline-first: load whatever is cached locally before touching relays.
       const cachedEvents = await getStoredEvents(user.pubkey);
 
-      // Best-effort relay fetch with a safety timeout, so a hung socket can
-      // never block the cached notes from appearing. A failure (offline,
-      // relays down, timeout) must not throw: the cache still has the notes.
-      const controller = new AbortController();
-      const abortFromCaller = () => controller.abort();
-      if (signal.aborted) {
-        controller.abort();
-      } else {
-        signal.addEventListener('abort', abortFromCaller, { once: true });
-      }
-      const timer = setTimeout(() => controller.abort(), RELAY_FETCH_TIMEOUT_MS);
-
+      // Best-effort relay fetch with a per-page safety timeout, so a hung
+      // socket can never block the cached notes from appearing. A failure
+      // (offline, relays down, timeout) must not throw: the cache still has
+      // the notes.
       let remoteEvents: NostrEvent[] = [];
       let offline = false;
       try {
-        remoteEvents = await nostr.query(
-          [{ kinds: [NOTE_KIND], authors: [user.pubkey], limit: 200 }],
-          { signal: controller.signal },
-        );
+        remoteEvents = await fetchAllNoteEvents(nostr, user.pubkey, signal);
       } catch (error) {
         // A caller-initiated cancellation should propagate so TanStack Query
         // discards the result; anything else counts as "offline".
         if (signal.aborted) throw error;
         offline = true;
-      } finally {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', abortFromCaller);
       }
 
       // Merge remote and cached copies, keep the newest per note, and persist
       // so the local cache becomes the union of every version seen.
       const merged = mergeEvents(cachedEvents, remoteEvents);
       await storeEvents(user.pubkey, merged);
+
+      // Relays are reachable: push anything they are missing, i.e. saves made
+      // offline and deletions a relay never received. Fire and forget, so a
+      // slow relay can't hold up the notes.
+      if (!offline) {
+        for (const event of findUnsynced(cachedEvents, remoteEvents)) {
+          void tryPublish(nostr, event);
+        }
+      }
 
       const notes: EncryptedNote[] = [];
 
@@ -199,7 +290,7 @@ export function useEncryptedNotes(): {
   });
 
   const saveNote = useMutation({
-    mutationFn: async (params: SaveNoteParams): Promise<NostrEvent> => {
+    mutationFn: async (params: SaveNoteParams): Promise<WriteResult> => {
       if (!user) throw new Error('You must be logged in to save notes.');
       if (!user.signer.nip44) {
         throw new Error(
@@ -242,13 +333,13 @@ export function useEncryptedNotes(): {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      await nostr.event(event, { signal: AbortSignal.timeout(5000) });
-      return event;
+      // Keep it locally before publishing, so the note survives even when no
+      // relay is reachable; the next sync re-publishes it.
+      await storeEvents(user.pubkey, [event]);
+      const published = await tryPublish(nostr, event);
+      return { event, published };
     },
-    onSuccess: (event) => {
-      // Persist locally right away so the note survives even if the write
-      // hasn't propagated to our read relays yet.
-      if (user) void storeEvents(user.pubkey, [event]);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {
@@ -257,7 +348,7 @@ export function useEncryptedNotes(): {
   });
 
   const deleteNote = useMutation({
-    mutationFn: async (noteId: string): Promise<NostrEvent> => {
+    mutationFn: async (noteId: string): Promise<WriteResult> => {
       if (!user) throw new Error('You must be logged in to delete notes.');
 
       // For addressable events, "delete" by publishing with empty content
@@ -271,12 +362,13 @@ export function useEncryptedNotes(): {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      await nostr.event(event, { signal: AbortSignal.timeout(5000) });
-      return event;
+      // Keep the tombstone locally so the deletion sticks offline; the next
+      // sync re-publishes it to any relay that missed it.
+      await storeEvents(user.pubkey, [event]);
+      const published = await tryPublish(nostr, event);
+      return { event, published };
     },
-    onSuccess: (event) => {
-      // Persist the tombstone locally so the deletion sticks.
-      if (user) void storeEvents(user.pubkey, [event]);
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesQueryKey(user?.pubkey) });
     },
     onError: (error) => {
