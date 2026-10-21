@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { eventAddress, mergeEvents } from './noteStore';
+import { eventAddress, findUnsynced, mergeEvents } from './noteStore';
 
 function makeEvent(overrides: Partial<NostrEvent> & { d?: string }): NostrEvent {
   const { d, ...rest } = overrides;
@@ -51,5 +51,28 @@ describe('mergeEvents', () => {
     const noD = makeEvent({});
 
     expect(mergeEvents([wrongKind, noD])).toEqual([]);
+  });
+});
+
+describe('findUnsynced', () => {
+  it('returns local notes the relays are missing', () => {
+    const offlineSave = makeEvent({ d: 'n1', created_at: 300 });
+
+    expect(findUnsynced([offlineSave], [])).toEqual([offlineSave]);
+  });
+
+  it('returns local versions newer than the relay copy, tombstones included', () => {
+    const onRelay = makeEvent({ d: 'n1', created_at: 100 });
+    const tombstone = makeEvent({ d: 'n1', created_at: 200, content: '' });
+
+    expect(findUnsynced([tombstone], [onRelay])).toEqual([tombstone]);
+  });
+
+  it('skips notes the relays already have or have newer', () => {
+    const same = makeEvent({ d: 'n1', created_at: 100 });
+    const stale = makeEvent({ d: 'n2', created_at: 100 });
+    const newerOnRelay = makeEvent({ d: 'n2', created_at: 200 });
+
+    expect(findUnsynced([same, stale], [same, newerOnRelay])).toEqual([]);
   });
 });

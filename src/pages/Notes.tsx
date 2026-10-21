@@ -189,7 +189,15 @@ export default function NotesPage() {
   const handleSave = useCallback(
     (params: SaveNoteParams) => {
       saveNote.mutate(params, {
-        onSuccess: () => closeEditor(),
+        onSuccess: ({ published }) => {
+          closeEditor();
+          if (!published) {
+            toast({
+              title: 'Saved on this device',
+              description: "Relays couldn't be reached. The note will sync next time you're online.",
+            });
+          }
+        },
         // Keep the editor open so the text isn't lost, and say why.
         onError: (error) =>
           toast({
@@ -205,7 +213,15 @@ export default function NotesPage() {
   const handleDelete = useCallback(
     (id: string) => {
       deleteNote.mutate(id, {
-        onSuccess: () => closeEditor(),
+        onSuccess: ({ published }) => {
+          closeEditor();
+          if (!published) {
+            toast({
+              title: 'Deleted on this device',
+              description: "Relays couldn't be reached. The deletion will sync next time you're online.",
+            });
+          }
+        },
         onError: (error) =>
           toast({
             title: "Couldn't delete note",
