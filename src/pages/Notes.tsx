@@ -3,6 +3,7 @@ import { useSeoMeta } from '@unhead/react';
 import { Plus, NotebookPen, Shield, Key, AlertTriangle, Search, ArrowUpDown, X, Calendar, WifiOff } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useToast } from '@/hooks/useToast';
 import { useEncryptedNotes, type EncryptedNote, type SaveNoteParams } from '@/hooks/useEncryptedNotes';
 import { NoteCard } from '@/components/notes/NoteCard';
 import { NoteEditor } from '@/components/notes/NoteEditor';
@@ -44,6 +45,7 @@ export default function NotesPage() {
 
   const { user } = useCurrentUser();
   const { notesQuery, saveNote, deleteNote } = useEncryptedNotes();
+  const { toast } = useToast();
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<EncryptedNote | undefined>(undefined);
@@ -188,18 +190,31 @@ export default function NotesPage() {
     (params: SaveNoteParams) => {
       saveNote.mutate(params, {
         onSuccess: () => closeEditor(),
+        // Keep the editor open so the text isn't lost, and say why.
+        onError: (error) =>
+          toast({
+            title: "Couldn't save note",
+            description: `${error.message} Your text is still in the editor — try again.`,
+            variant: 'destructive',
+          }),
       });
     },
-    [saveNote, closeEditor],
+    [saveNote, closeEditor, toast],
   );
 
   const handleDelete = useCallback(
     (id: string) => {
       deleteNote.mutate(id, {
         onSuccess: () => closeEditor(),
+        onError: (error) =>
+          toast({
+            title: "Couldn't delete note",
+            description: error.message,
+            variant: 'destructive',
+          }),
       });
     },
-    [deleteNote, closeEditor],
+    [deleteNote, closeEditor, toast],
   );
 
   const hasActiveFilters = selectedTags.size > 0 || searchQuery.trim() !== '';
