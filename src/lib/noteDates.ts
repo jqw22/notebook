@@ -32,10 +32,20 @@ export function formatNoteDate(value: number | null | undefined): string | null 
     : null;
 }
 
-/** `YYYY-MM-DD` value for an `<input type="date">`, or '' when invalid. */
+/**
+ * `YYYY-MM-DD` value for an `<input type="date">`, or '' when invalid.
+ *
+ * Uses local date parts, matching `dateInputValueToUnixSeconds` (which stores
+ * local midnight). `toISOString()` would read the UTC date instead, showing the
+ * previous day east of UTC and shifting the date back a day on every save.
+ */
 export function toDateInputValue(value: number | null | undefined): string {
   const date = toDateFromUnixSeconds(value);
-  return date ? date.toISOString().slice(0, 10) : '';
+  if (!date) return '';
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /** Parse a `YYYY-MM-DD` input value into Unix seconds, or null when invalid/empty. */

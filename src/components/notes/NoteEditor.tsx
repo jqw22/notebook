@@ -7,6 +7,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -57,6 +67,15 @@ export function NoteEditor({
     toDateInputValue(note?.data.follow_up_date),
   );
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Confirmation for deleting the note, or for closing the editor with
+  // unsaved changes. The kind outlives `open` so the text doesn't change
+  // while the dialog animates closed.
+  const [confirmKind, setConfirmKind] = useState<'delete' | 'discard'>('delete');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const askToConfirm = (kind: 'delete' | 'discard') => {
+    setConfirmKind(kind);
+    setConfirmOpen(true);
+  };
 
   // Filtered suggestions from existing tags, excluding already-added tags
   const filteredSuggestions = useMemo(() => {
@@ -147,7 +166,8 @@ export function NoteEditor({
     });
   };
 
-  const handleDelete = () => {
+  const confirmDelete = () => {
+    setConfirmOpen(false);
     if (note && onDelete) {
       const noteId = note.event.tags.find(([n]) => n === 'd')?.[1];
       if (noteId) onDelete(noteId);
@@ -163,169 +183,213 @@ export function NoteEditor({
       JSON.stringify(tags) !== JSON.stringify(note?.tags ?? []) ||
       followUpDate !== existingFollowUpStr;
 
+  // Escape, clicking outside and Cancel all come through here, so unsaved
+  // changes are never dropped without asking.
+  const requestClose = () => {
+    if (isSaving) return;
+    if (hasChanges) {
+      askToConfirm('discard');
+    } else {
+      onClose();
+    }
+  };
+
+  const discardChanges = () => {
+    setConfirmOpen(false);
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{isNew ? 'New Note' : 'Edit Note'}</DialogTitle>
-          <DialogDescription>
-            {isNew
-              ? 'Your note is encrypted with NIP-44 and stored privately on your relays.'
-              : 'Edit your encrypted note. Changes are encrypted before publishing.'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && requestClose()}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{isNew ? 'New Note' : 'Edit Note'}</DialogTitle>
+            <DialogDescription>
+              {isNew
+                ? 'Your note is encrypted with NIP-44 and stored privately on your relays.'
+                : 'Edit your encrypted note. Changes are encrypted before publishing.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto py-2">
-          {/* Title */}
-          <div className="space-y-2">
-            <label htmlFor="note-title" className="text-sm font-medium">
-              Title
-            </label>
-            <Input
-              id="note-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Note title..."
-              className="text-lg"
-            />
-          </div>
-
-          {/* Content */}
-          <div className="space-y-2">
-            <label htmlFor="note-content" className="text-sm font-medium">
-              Content
-            </label>
-            <Textarea
-              id="note-content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Write your private note here..."
-              className="min-h-[200px] resize-y"
-            />
-          </div>
-
-          {/* Follow-up date */}
-          <div className="space-y-2">
-            <label htmlFor="note-followup" className="text-sm font-medium flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              Follow-up date
-              <span className="text-xs text-muted-foreground font-normal">(optional)</span>
-            </label>
-            <div className="flex items-center gap-2">
+          <div className="flex-1 space-y-4 overflow-y-auto py-2">
+            {/* Title */}
+            <div className="space-y-2">
+              <label htmlFor="note-title" className="text-sm font-medium">
+                Title
+              </label>
               <Input
-                id="note-followup"
-                type="date"
-                value={followUpDate}
-                onChange={(e) => setFollowUpDate(e.target.value)}
-                className="max-w-[200px]"
+                id="note-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Note title..."
+                className="text-lg"
               />
-              {followUpDate && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setFollowUpDate('')}
-                  className="text-xs text-muted-foreground"
-                >
-                  Clear
-                </Button>
-              )}
             </div>
-          </div>
 
-          {/* Tags */}
-          <div className="space-y-2">
-            <label htmlFor="note-tags" className="text-sm font-medium">
-              Tags
-            </label>
-            <div className="relative">
-              <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-3 py-2 min-h-[42px] focus-within:ring-1 focus-within:ring-ring">
-                {tags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="gap-1 pr-1"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 transition-colors"
-                      aria-label={`Remove tag ${tag}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-                <input
-                  id="note-tags"
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => {
-                    setTagInput(e.target.value);
-                    setHighlightedIndex(-1);
-                  }}
-                  onKeyDown={handleTagKeyDown}
-                  onBlur={handleTagBlur}
-                  placeholder={tags.length === 0 ? 'Add tags...' : ''}
-                  className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            {/* Content */}
+            <div className="space-y-2">
+              <label htmlFor="note-content" className="text-sm font-medium">
+                Content
+              </label>
+              <Textarea
+                id="note-content"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Write your private note here..."
+                className="min-h-[200px] resize-y"
+              />
+            </div>
+
+            {/* Follow-up date */}
+            <div className="space-y-2">
+              <label htmlFor="note-followup" className="text-sm font-medium flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                Follow-up date
+                <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="note-followup"
+                  type="date"
+                  value={followUpDate}
+                  onChange={(e) => setFollowUpDate(e.target.value)}
+                  className="max-w-[200px]"
                 />
+                {followUpDate && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFollowUpDate('')}
+                    className="text-xs text-muted-foreground"
+                  >
+                    Clear
+                  </Button>
+                )}
               </div>
+            </div>
 
-              {/* Autocomplete dropdown */}
-              {showSuggestions && (
-                <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-md border border-input bg-popover shadow-md max-h-[160px] overflow-y-auto">
-                  {filteredSuggestions.map((tag, idx) => (
-                    <button
+            {/* Tags */}
+            <div className="space-y-2">
+              <label htmlFor="note-tags" className="text-sm font-medium">
+                Tags
+              </label>
+              <div className="relative">
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-3 py-2 min-h-[42px] focus-within:ring-1 focus-within:ring-ring">
+                  {tags.map((tag) => (
+                    <Badge
                       key={tag}
-                      type="button"
-                      className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
-                        idx === highlightedIndex
-                          ? 'bg-accent text-accent-foreground'
-                          : 'hover:bg-muted'
-                      }`}
-                      onMouseDown={(e) => {
-                        e.preventDefault(); // prevent blur on input
-                      }}
-                      onClick={() => addTag(tag)}
+                      variant="secondary"
+                      className="gap-1 pr-1"
                     >
                       {tag}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-muted-foreground/20 transition-colors"
+                        aria-label={`Remove tag ${tag}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
                   ))}
+                  <input
+                    id="note-tags"
+                    type="text"
+                    value={tagInput}
+                    onChange={(e) => {
+                      setTagInput(e.target.value);
+                      setHighlightedIndex(-1);
+                    }}
+                    onKeyDown={handleTagKeyDown}
+                    onBlur={handleTagBlur}
+                    placeholder={tags.length === 0 ? 'Add tags...' : ''}
+                    className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
                 </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Press Enter or comma to add a tag. Tags are stored in cleartext for filtering.
-            </p>
-          </div>
-        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          {!isNew && onDelete && (
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isSaving || isDeleting}
-              className="mr-auto"
-            >
-              {isDeleting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              <span className="ml-1.5">Delete</span>
+                {/* Autocomplete dropdown */}
+                {showSuggestions && (
+                  <div className="absolute top-full left-0 right-0 z-10 mt-1 rounded-md border border-input bg-popover shadow-md max-h-[160px] overflow-y-auto">
+                    {filteredSuggestions.map((tag, idx) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
+                          idx === highlightedIndex
+                            ? 'bg-accent text-accent-foreground'
+                            : 'hover:bg-muted'
+                        }`}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // prevent blur on input
+                        }}
+                        onClick={() => addTag(tag)}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Press Enter or comma to add a tag. Tags are stored in cleartext for filtering.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            {!isNew && onDelete && (
+              <Button
+                variant="destructive"
+                onClick={() => askToConfirm('delete')}
+                disabled={isSaving || isDeleting}
+                className="mr-auto"
+              >
+                {isDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span className="ml-1.5">Delete</span>
+              </Button>
+            )}
+            <Button variant="outline" onClick={requestClose} disabled={isSaving}>
+              Cancel
             </Button>
-          )}
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-            {isSaving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-            {isSaving ? 'Encrypting & Saving...' : 'Save'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
+              {isSaving && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              {isSaving ? 'Encrypting & Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmKind === 'delete' ? 'Delete this note?' : 'Discard unsaved changes?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmKind === 'delete'
+                ? 'The note will be removed from your notebook on every device. This cannot be undone.'
+                : 'Your edits to this note have not been saved and will be lost.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              {confirmKind === 'delete' ? 'Cancel' : 'Keep editing'}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={confirmKind === 'delete' ? confirmDelete : discardChanges}
+            >
+              {confirmKind === 'delete' ? 'Delete' : 'Discard'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

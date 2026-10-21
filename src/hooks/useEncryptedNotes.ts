@@ -48,7 +48,7 @@ const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
  * `eventCreatedAt` is used as a fallback for a missing/invalid `updated_at` so
  * a note can always be rendered and sorted.
  */
-function parseNoteData(raw: unknown, eventCreatedAt: number): NoteData | undefined {
+export function parseNoteData(raw: unknown, eventCreatedAt: number): NoteData | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return undefined;
   }
