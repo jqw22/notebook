@@ -294,6 +294,12 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                   )}
                   {isExtensionLoggingIn ? 'Logging in…' : 'Log in with extension'}
                 </Button>
+                {extensionAvailable && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Uses the account that's active in your extension. To use another one, switch
+                    accounts in the extension.
+                  </p>
+                )}
                 {!extensionAvailable && (
                   <p className="text-xs text-muted-foreground text-center">
                     No signer extension found in this browser.
