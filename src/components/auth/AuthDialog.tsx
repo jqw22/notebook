@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, ExternalLink, Puzzle } from 'lucide-react';
+import { Loader2, ExternalLink, Puzzle, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -25,8 +25,9 @@ const validateBunkerUri = (uri: string) => uri.startsWith('bunker://');
 const SIGNER_LINKS = [
   { name: 'Alby', href: 'https://getalby.com/', kind: 'extension' },
   { name: 'nos2x', href: 'https://github.com/fiatjaf/nos2x', kind: 'extension' },
+  { name: 'Nostash', href: 'https://apps.apple.com/app/nostash/id6744309333', kind: 'Safari extension for iPhone and iPad' },
   { name: 'Amber', href: 'https://github.com/greenart7c3/Amber', kind: 'Android app' },
-  { name: 'nsec.app', href: 'https://nsec.app/', kind: 'bunker' },
+  { name: 'nsec.app', href: 'https://nsec.app/', kind: 'bunker, works in any browser' },
 ] as const;
 
 const connectStatusLabel = (status: NostrConnectStatus | null): string => {
@@ -39,12 +40,6 @@ const connectStatusLabel = (status: NostrConnectStatus | null): string => {
       return '';
   }
 };
-
-/** Check if running on an actual mobile device (not just a small screen). */
-function isMobileDevice(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
 
 /** Whether a NIP-07 provider has been injected at `window.nostr`. */
 function hasNip07Extension(): boolean {
@@ -72,6 +67,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // Whether the user has launched the signer app. Until then we show the
   // login options; once launched we swap in the progress view.
   const [hasOpenedSigner, setHasOpenedSigner] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const login = useLoginActions();
   // Stable refs so the nostrconnect listening effect below doesn't restart on
@@ -108,6 +104,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       setConnectError(null);
       setConnectStatus(null);
       setHasOpenedSigner(false);
+      setLinkCopied(false);
       /* eslint-enable react-hooks/set-state-in-effect */
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -119,9 +116,9 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   const generateConnectSession = useCallback((): string => {
     const relayUrls = login.getRelayUrls();
     const params = generateNostrConnectParams(relayUrls);
-    const uri = generateNostrConnectURI(params, {
-      callback: isMobileDevice() ? `${window.location.origin}/remoteloginsuccess` : undefined,
-    });
+    // No `callback`: the app has no page to land on after approval, and a
+    // redirect would reload the app and drop the handshake in progress.
+    const uri = generateNostrConnectURI(params, { name: 'Simple Notebook' });
     setNostrConnectParams(params);
     setNostrConnectUri(uri);
     setConnectError(null);
@@ -190,12 +187,23 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // Launch a remote signer app via nostrconnect. Generates the session (if
   // needed) and navigates to the URI; the listening effect handles the
   // handshake. No QR code is shown.
+  // Start a nostrconnect session. We don't navigate to the URI here: on a
+  // device with no app registered for nostrconnect:// (e.g. iPhone) that
+  // just fails. The progress view offers an "Open" link and a copy button
+  // so the link can also be pasted into a web signer such as nsec.app.
   const handleOpenSignerApp = () => {
     setLoginError('');
     setHasOpenedSigner(true);
-    const uri = nostrConnectUri || generateConnectSession();
-    if (uri) {
-      window.location.href = uri;
+    setLinkCopied(false);
+    if (!nostrConnectUri) generateConnectSession();
+  };
+
+  const handleCopyConnectLink = async () => {
+    try {
+      await navigator.clipboard.writeText(nostrConnectUri);
+      setLinkCopied(true);
+    } catch {
+      setLinkCopied(false);
     }
   };
 
@@ -239,8 +247,9 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     login
       .bunker(value)
       .then(() => onClose())
-      .catch(() => {
-        setLoginError('Failed to connect. Check the bunker URI.');
+      .catch((error) => {
+        const reason = error instanceof Error ? ` (${error.message})` : '';
+        setLoginError(`Failed to connect. Check the bunker URI and that your signer is open.${reason}`);
         setIsLoggingIn(false);
       });
   };
@@ -270,6 +279,32 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
               <p className="text-sm text-muted-foreground text-center min-h-[1.25rem]">
                 {connectStatusLabel(connectStatus) || 'Waiting for your signer…'}
               </p>
+              {nostrConnectUri && connectStatus !== 'getting-public-key' && (
+                <div className="w-full space-y-2">
+                  <Button asChild className="w-full rounded-full">
+                    <a href={nostrConnectUri}>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Open in signer app
+                    </a>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleCopyConnectLink}
+                    className="w-full rounded-full"
+                  >
+                    {linkCopied ? (
+                      <Check className="w-4 h-4 mr-2" />
+                    ) : (
+                      <Copy className="w-4 h-4 mr-2" />
+                    )}
+                    {linkCopied ? 'Copied' : 'Copy connection link'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    No signer app on this device? Copy the link and paste it into your signer
+                    (for example nsec.app's "Connect app"), then come back here.
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleConnectRetry}
@@ -334,7 +369,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                 className="w-full rounded-full"
               >
                 <ExternalLink className="w-4 h-4 mr-2" />
-                Open signer app
+                Connect a signer app
               </Button>
 
               <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
