@@ -3,6 +3,7 @@ import { useNostr } from '@nostrify/react';
 import { useCallback, useMemo } from 'react';
 
 import { ExtensionSigner } from '@/lib/extensionSigner';
+import { RemoteSigner } from '@/lib/remoteSigner';
 import { useAuthor } from './useAuthor.ts';
 
 export function useCurrentUser() {
@@ -14,7 +15,7 @@ export function useCurrentUser() {
       // 'nsec' logins are not supported: the key would sit unencrypted in
       // localStorage. LegacyKeyNotice removes any left from older versions.
       case 'bunker': // Nostr login with NIP-46 "bunker://" URI
-        return NUser.fromBunkerLogin(login, nostr);
+        return new NUser('bunker', login.pubkey, RemoteSigner.fromLogin(login, nostr));
       case 'extension': // Nostr login with NIP-07 browser extension
         // Bound to this login's pubkey, so it never signs as whichever
         // other account the extension happens to have active.

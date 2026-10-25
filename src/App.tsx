@@ -12,6 +12,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
 import { LegacyKeyNotice } from '@/components/auth/LegacyKeyNotice';
 import { ExtensionAccountSync } from '@/components/auth/ExtensionAccountSync';
+import { SignerApprovalPrompt } from '@/components/auth/SignerApprovalPrompt';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
@@ -57,6 +58,7 @@ export function App() {
               <NostrSync />
               <LegacyKeyNotice />
               <ExtensionAccountSync />
+              <SignerApprovalPrompt />
               <TooltipProvider>
                 <Toaster />
                 <Suspense>
