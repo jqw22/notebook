@@ -13,6 +13,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import { LegacyKeyNotice } from '@/components/auth/LegacyKeyNotice';
 import { ExtensionAccountSync } from '@/components/auth/ExtensionAccountSync';
 import { MissingExtensionNotice } from '@/components/auth/MissingExtensionNotice';
+import { LocalKeyUnlock } from '@/components/auth/LocalKeyUnlock';
 import { SignerApprovalPrompt } from '@/components/auth/SignerApprovalPrompt';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
@@ -60,6 +61,7 @@ export function App() {
               <LegacyKeyNotice />
               <ExtensionAccountSync />
               <MissingExtensionNotice />
+              <LocalKeyUnlock />
               <SignerApprovalPrompt />
               <TooltipProvider>
                 <Toaster />

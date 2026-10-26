@@ -74,7 +74,7 @@ Kinds below 1000 are "legacy"; their storage behavior is per-kind (e.g. kind 1 i
 
 ### Nostr Security Model
 
-**CRITICAL:** This app does **not** accept `nsec` logins, because Nostrify would store the secret key **in plaintext in `localStorage`**. Users log in only with a NIP-07 extension or a NIP-46 remote signer; `LegacyKeyNotice` removes any nsec login left by older versions. **Never add an nsec login path back.** XSS is still the top-priority security concern: injected script can call the user's signer to sign or decrypt on their behalf.
+**CRITICAL:** This app never stores a secret key in plain text. Nostrify's built-in `nsec` login would put it **in plaintext in `localStorage`**, so it is not used. Users log in with a NIP-07 extension, a NIP-46 remote signer, or a secret key via `src/lib/localKey.ts`, which keeps the key in memory and saves it only NIP-49-encrypted with the user's password (`LocalKeyUnlock` asks for it after a reload). `LegacyKeyNotice` removes plain nsec logins left by older versions. **Never store an unencrypted key.** XSS is still the top-priority security concern: injected script can read an unlocked key from memory or call the user's signer.
 
 - **Never** use `dangerouslySetInnerHTML`, `innerHTML`, or `document.write` with event data, URL params, or other untrusted strings.
 - **CSP is defense-in-depth**, not primary defense. `index.html` ships a restrictive CSP (`script-src 'self'`, `default-src 'none'`). Never relax it with `'unsafe-eval'`, `'unsafe-inline'` on `script-src`, or wildcard sources.
@@ -192,7 +192,7 @@ export function MyComponent() {
 
 ### Nostr Login
 
-Use the `LoginArea` component (already in the project). It renders a single "Log in" button when logged out (opens an `AuthDialog` supporting a NIP-07 extension and NIP-46 remote signers, with links to get a signer) and becomes an account switcher when logged in. **Do not wrap it in conditional logic.**
+Use the `LoginArea` component (already in the project). It renders a single "Log in" button when logged out (opens an `AuthDialog` supporting a NIP-07 extension, NIP-46 remote signers, and a password-protected secret key) and becomes an account switcher when logged in. **Do not wrap it in conditional logic.**
 
 ```tsx
 import { LoginArea } from '@/components/auth/LoginArea';

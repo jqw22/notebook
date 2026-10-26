@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAppContext } from '@/hooks/useAppContext';
 import { ExtensionSigner } from '@/lib/extensionSigner';
 import { RemoteSigner } from '@/lib/remoteSigner';
+import { LOCAL_KEY_LOGIN, LocalKeySigner } from '@/lib/localKey';
 
 interface NostrProviderProps {
   children: React.ReactNode;
@@ -113,6 +114,8 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
           return RemoteSigner.fromLogin(currentLogin, pool);
         case 'extension':
           return new ExtensionSigner(currentLogin.pubkey);
+        case LOCAL_KEY_LOGIN:
+          return new LocalKeySigner(currentLogin.pubkey);
         default:
           return undefined;
       }
