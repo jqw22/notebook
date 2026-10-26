@@ -122,3 +122,16 @@ export async function getExtensionPubkey(): Promise<string | undefined> {
     return undefined;
   }
 }
+
+/**
+ * Whether a NIP-07 extension is present. Extensions inject `window.nostr`
+ * after the page starts, so wait a little before deciding there is none.
+ */
+export async function waitForExtension(timeoutMs = 3000): Promise<boolean> {
+  const has = () => !!(globalThis as { nostr?: unknown }).nostr;
+  const deadline = Date.now() + timeoutMs;
+  while (!has() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return has();
+}
