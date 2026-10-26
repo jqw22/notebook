@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Loader2, ExternalLink, Puzzle, Copy, Check } from 'lucide-react';
+import { Loader2, ExternalLink, Puzzle, Copy, Check, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SecretKeyLoginForm } from './SecretKeyLoginForm';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -16,8 +17,8 @@ interface AuthDialogProps {
   onClose: () => void;
 }
 
-// Secret keys are never accepted: this app only signs through a NIP-07
-// extension or a NIP-46 remote signer, so no key is ever stored in the browser.
+// A pasted nsec goes to SecretKeyLoginForm, which keeps the key in memory and
+// saves it only encrypted with the user's password.
 const looksLikeNsec = (value: string) => value.startsWith('nsec1');
 const validateBunkerUri = (uri: string) => uri.startsWith('bunker://');
 
@@ -68,6 +69,9 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // login options; once launched we swap in the progress view.
   const [hasOpenedSigner, setHasOpenedSigner] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Secret key ("nsec") login, collapsed by default.
+  const [showKeyForm, setShowKeyForm] = useState(false);
+  const [pastedNsec, setPastedNsec] = useState('');
 
   const login = useLoginActions();
   // Stable refs so the nostrconnect listening effect below doesn't restart on
@@ -105,6 +109,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       setConnectStatus(null);
       setHasOpenedSigner(false);
       setLinkCopied(false);
+      setShowKeyForm(false);
+      setPastedNsec('');
       /* eslint-enable react-hooks/set-state-in-effect */
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -229,11 +235,10 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     }
 
     if (looksLikeNsec(value)) {
-      // Don't keep the secret key in component state any longer than needed.
+      // Hand a pasted secret key to the secret key form instead.
       setBunkerInput('');
-      setLoginError(
-        "Secret keys (nsec) aren't accepted. Import your key into a signer extension or app, then log in with that.",
-      );
+      setPastedNsec(value);
+      setShowKeyForm(true);
       return;
     }
 
@@ -371,6 +376,25 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                 <ExternalLink className="w-4 h-4 mr-2" />
                 Connect a signer app
               </Button>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                or use your secret key
+                <div className="h-px flex-1 bg-border" />
+              </div>
+
+              {showKeyForm ? (
+                <SecretKeyLoginForm key={pastedNsec} initialNsec={pastedNsec} onLoggedIn={onClose} />
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowKeyForm(true)}
+                  className="w-full rounded-full"
+                >
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Paste secret key (nsec)
+                </Button>
+              )}
 
               <div className="rounded-lg bg-muted/50 p-3 space-y-1.5">
                 <p className="text-xs font-medium">New to Nostr? Get a signer first:</p>

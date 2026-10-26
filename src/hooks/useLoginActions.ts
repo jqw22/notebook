@@ -9,10 +9,12 @@ import {
 import { useAppContext } from '@/hooks/useAppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { loginWithBunker } from '@/lib/remoteSigner';
+import { createLocalKeyLogin } from '@/lib/localKey';
 
 // NOTE: This file should not be edited except for adding new login methods.
-// There is deliberately no nsec login: a secret key entered here would be
-// stored unencrypted in localStorage. Use an extension or a remote signer.
+// There is deliberately no plain `nsec` login: Nostrify would store the key
+// unencrypted in localStorage. `localKey` keeps it in memory instead, and
+// saves it only encrypted with the user's password.
 
 export type { NostrConnectParams, NostrConnectStatus };
 export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/react/login';
@@ -33,6 +35,11 @@ export function useLoginActions() {
   };
 
   return {
+    // Login with a secret key held only in memory. With a password, the key
+    // is also saved encrypted (NIP-49) so it can be unlocked on later visits.
+    localKey(nsec: string, password?: string): void {
+      addAndActivate(createLocalKeyLogin(nsec, password) as NLoginType);
+    },
     // Login with a NIP-46 "bunker://" URI
     async bunker(uri: string): Promise<void> {
       const login = await loginWithBunker(uri, nostr);

@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 
 import { ExtensionSigner } from '@/lib/extensionSigner';
 import { RemoteSigner } from '@/lib/remoteSigner';
+import { LOCAL_KEY_LOGIN, LocalKeySigner } from '@/lib/localKey';
 import { useAuthor } from './useAuthor.ts';
 
 export function useCurrentUser() {
@@ -12,14 +13,16 @@ export function useCurrentUser() {
 
   const loginToUser = useCallback((login: NLoginType): NUser  => {
     switch (login.type) {
-      // 'nsec' logins are not supported: the key would sit unencrypted in
-      // localStorage. LegacyKeyNotice removes any left from older versions.
+      // Plain 'nsec' logins are not supported: the key would sit unencrypted
+      // in localStorage. LegacyKeyNotice removes any left from older versions.
       case 'bunker': // Nostr login with NIP-46 "bunker://" URI
         return new NUser('bunker', login.pubkey, RemoteSigner.fromLogin(login, nostr));
       case 'extension': // Nostr login with NIP-07 browser extension
         // Bound to this login's pubkey, so it never signs as whichever
         // other account the extension happens to have active.
         return new NUser('extension', login.pubkey, new ExtensionSigner(login.pubkey));
+      case LOCAL_KEY_LOGIN: // Secret key held in memory, optionally saved encrypted
+        return new NUser(LOCAL_KEY_LOGIN, login.pubkey, new LocalKeySigner(login.pubkey));
       // Other login types can be defined here
       default:
         throw new Error(`Unsupported login type: ${login.type}`);
