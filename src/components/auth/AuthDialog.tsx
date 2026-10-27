@@ -124,7 +124,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     const params = generateNostrConnectParams(relayUrls);
     // No `callback`: the app has no page to land on after approval, and a
     // redirect would reload the app and drop the handshake in progress.
-    const uri = generateNostrConnectURI(params, { name: 'Simple Notebook' });
+    const uri = generateNostrConnectURI(params, { name: 'My Notes' });
     setNostrConnectParams(params);
     setNostrConnectUri(uri);
     setConnectError(null);

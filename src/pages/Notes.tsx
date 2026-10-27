@@ -39,7 +39,7 @@ const EMPTY_NOTES: EncryptedNote[] = [];
 
 export default function NotesPage() {
   useSeoMeta({
-    title: 'Simple Notebook',
+    title: 'My Notes',
     description: 'Your encrypted notebook powered by Nostr NIP-44 encryption.',
   });
 
@@ -244,7 +244,7 @@ export default function NotesPage() {
             <Shield className="h-8 w-8 text-primary" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">Simple Notebook</h1>
+            <h1 className="text-3xl font-bold tracking-tight">My Notes</h1>
             <p className="text-muted-foreground">
               Your notes are encrypted with NIP-44 and stored on Nostr relays.
               Log in to access your notebook.
@@ -346,7 +346,7 @@ export default function NotesPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Simple Notebook</h1>
+            <h1 className="text-3xl font-bold tracking-tight">My Notes</h1>
             <p className="text-muted-foreground mt-1">
               {notes.length} note{notes.length !== 1 ? 's' : ''} &middot; end-to-end encrypted
             </p>
