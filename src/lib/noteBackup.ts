@@ -46,7 +46,7 @@ export function buildBackup(pubkey: string, events: NostrEvent[]): BackupFile {
     type: BACKUP_TYPE,
     version: BACKUP_VERSION,
     exportedAt: Math.floor(Date.now() / 1000),
-    app: 'Simple Notebook',
+    app: 'My Notes',
     pubkey,
     events,
   };
@@ -74,7 +74,7 @@ export function parseBackup(json: string, pubkey: string): ParseBackupResult {
 
   const parsed = BackupSchema.safeParse(raw);
   if (!parsed.success) {
-    throw new Error('That file is not a Simple Notebook backup.');
+    throw new Error('That file is not a My Notes backup.');
   }
   if (parsed.data.version > BACKUP_VERSION) {
     throw new Error('That backup was created by a newer version of the app.');

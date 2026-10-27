@@ -46,7 +46,7 @@ describe('parseBackup', () => {
 
   it('rejects non-JSON, foreign files and newer versions', () => {
     expect(() => parseBackup('not json', pubkey)).toThrow('not valid JSON');
-    expect(() => parseBackup('{"hello":1}', pubkey)).toThrow('not a Simple Notebook backup');
+    expect(() => parseBackup('{"hello":1}', pubkey)).toThrow('not a My Notes backup');
 
     const future = { ...buildBackup(pubkey, []), version: 99 };
     expect(() => parseBackup(JSON.stringify(future), pubkey)).toThrow('newer version');

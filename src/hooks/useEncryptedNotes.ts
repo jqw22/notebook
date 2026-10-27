@@ -43,7 +43,7 @@ export interface SaveNoteParams {
 }
 
 const NOTE_KIND = 30078;
-const ALT_DESCRIPTION = 'Encrypted Simple Notebook entry';
+const ALT_DESCRIPTION = 'Encrypted My Notes entry';
 
 /**
  * Validate and normalise a decrypted note payload.
