@@ -112,7 +112,7 @@ export async function createLocalKeyLoginWithPasskey(nsec: string): Promise<Loca
   const npub = nip19.npubEncode(pubkey);
   const passkey = await createPasskeyLock(sk, {
     pubkey,
-    label: `Notebook ${npub.slice(0, 12)}…`,
+    label: `My Notes ${npub.slice(0, 12)}…`,
   });
   unlocked.set(pubkey, sk);
   changed();

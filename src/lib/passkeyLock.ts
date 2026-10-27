@@ -20,7 +20,11 @@ export interface PasskeyLock {
 
 export class PasskeyUnsupportedError extends Error {
   constructor() {
-    super("Face ID unlock isn't supported in this browser. Use a password instead.");
+    super(
+      "Face ID unlock needs a passkey saved in Apple Passwords (iCloud Keychain). " +
+        "Password managers such as Bitwarden can't do this yet. Use a password instead, " +
+        'or try again and choose Passwords when asked where to save the passkey.',
+    );
     this.name = 'PasskeyUnsupportedError';
   }
 }
@@ -92,7 +96,7 @@ export async function createPasskeyLock(
 
   const credential = (await navigator.credentials.create({
     publicKey: {
-      rp: { name: 'Simple Notebook', id: location.hostname },
+      rp: { name: 'My Notes', id: location.hostname },
       user: { id: random(16), name: account.label, displayName: account.label },
       challenge: random(32),
       pubKeyCredParams: [
@@ -101,7 +105,10 @@ export async function createPasskeyLock(
       ],
       authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
       extensions: { prf: { eval: { first: salt } } } as AuthenticationExtensionsClientInputs,
-    },
+      // Prefer the device's own keychain: some password managers (e.g.
+      // Bitwarden) save passkeys without the PRF extension we need.
+      hints: ['client-device'],
+    } as PublicKeyCredentialCreationOptions,
   })) as PublicKeyCredential | null;
   if (!credential) throw new PasskeyUnsupportedError();
 
