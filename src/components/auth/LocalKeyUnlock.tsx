@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Loader2, LockKeyhole } from 'lucide-react';
+import { Loader2, LockKeyhole, ScanFace } from 'lucide-react';
 import { useNostrLogin } from '@nostrify/react/login';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,9 @@ import {
   isUnlocked,
   lockRemovedKeys,
   subscribeLocalKeys,
+  hasPasskey,
   unlockWithNsec,
+  unlockWithPasskey,
   unlockWithPassword,
 } from '@/lib/localKey';
 
@@ -46,6 +48,36 @@ export function LocalKeyUnlock() {
   const login = isLocalKeyLogin(current) ? current : undefined;
   const open = !!login && !isUnlocked(login.pubkey);
   const saved = typeof login?.data.ncryptsec === 'string';
+  const withPasskey = !!login && hasPasskey(login);
+  // With a passkey the field below is a fallback: paste the nsec instead.
+  const [showFallback, setShowFallback] = useState(false);
+  const showField = !withPasskey || showFallback;
+
+  const unlocked = () => {
+    setValue('');
+    setShowFallback(false);
+    // Anything that failed while locked (e.g. decrypting notes) can retry.
+    queryClient.invalidateQueries();
+  };
+
+  // Start the Face ID prompt straight from the tap.
+  const unlockPasskey = () => {
+    if (!login) return;
+    setError('');
+    setBusy(true);
+    unlockWithPasskey(login)
+      .then(unlocked, (e) => {
+        const cancelled = e instanceof DOMException && e.name === 'NotAllowedError';
+        setError(
+          cancelled
+            ? 'Face ID was cancelled. Try again, or paste your nsec instead.'
+            : e instanceof Error
+              ? e.message
+              : "Couldn't unlock.",
+        );
+      })
+      .finally(() => setBusy(false));
+  };
 
   const unlock = () => {
     if (!login) return;
@@ -56,9 +88,7 @@ export function LocalKeyUnlock() {
       try {
         if (saved) unlockWithPassword(login, value);
         else unlockWithNsec(login, value);
-        setValue('');
-        // Anything that failed while locked (e.g. decrypting notes) can retry.
-        queryClient.invalidateQueries();
+        unlocked();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't unlock.");
       } finally {
@@ -71,6 +101,7 @@ export function LocalKeyUnlock() {
     if (login) removeLogin(login.id);
     setValue('');
     setError('');
+    setShowFallback(false);
   };
 
   return (
@@ -87,9 +118,11 @@ export function LocalKeyUnlock() {
           </div>
           <DialogTitle className="text-center">Unlock your account</DialogTitle>
           <DialogDescription className="text-center">
-            {saved
-              ? 'Enter the password you set to unlock your key on this device.'
-              : 'Your key is not saved on this device. Paste your nsec to continue.'}
+            {withPasskey
+              ? 'Use Face ID or Touch ID to unlock your key on this device.'
+              : saved
+                ? 'Enter the password you set to unlock your key on this device.'
+                : 'Your key is not saved on this device. Paste your nsec to continue.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,23 +133,57 @@ export function LocalKeyUnlock() {
           }}
           className="space-y-3"
         >
-          <Input
-            type="password"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              if (error) setError('');
-            }}
-            placeholder={saved ? 'Password' : 'nsec1…'}
-            autoComplete={saved ? 'current-password' : 'off'}
-            aria-label={saved ? 'Password' : 'Secret key'}
-            autoFocus
-          />
+          {withPasskey && (
+            <Button
+              type="button"
+              onClick={unlockPasskey}
+              disabled={busy}
+              className="w-full rounded-full"
+            >
+              {busy ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <ScanFace className="w-4 h-4 mr-2" />
+              )}
+              Unlock with Face ID
+            </Button>
+          )}
+          {showField && (
+            <>
+              <Input
+                type="password"
+                value={value}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                  if (error) setError('');
+                }}
+                placeholder={saved ? 'Password' : 'nsec1…'}
+                autoComplete={saved ? 'current-password' : 'off'}
+                aria-label={saved ? 'Password' : 'Secret key'}
+                autoFocus={!withPasskey}
+              />
+              <Button
+                type="submit"
+                variant={withPasskey ? 'outline' : 'default'}
+                disabled={busy || !value}
+                className="w-full rounded-full"
+              >
+                {busy && !withPasskey && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Unlock
+              </Button>
+            </>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={busy || !value} className="w-full rounded-full">
-            {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Unlock
-          </Button>
+          {withPasskey && !showFallback && (
+            <Button
+              type="button"
+              variant="link"
+              onClick={() => setShowFallback(true)}
+              className="w-full text-muted-foreground"
+            >
+              Paste my nsec instead
+            </Button>
+          )}
           <Button type="button" variant="ghost" onClick={logOut} className="w-full rounded-full">
             Log out
           </Button>
