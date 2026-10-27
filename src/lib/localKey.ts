@@ -2,6 +2,7 @@ import { NSecSigner, type NostrEvent, type NostrSigner } from '@nostrify/nostrif
 import { NLogin, type NLoginType } from '@nostrify/react/login';
 import { getPublicKey, nip19 } from 'nostr-tools';
 import * as nip49 from 'nostr-tools/nip49';
+import { createPasskeyLock, openPasskeyLock, type PasskeyLock } from './passkeyLock';
 
 /*
  * Logging in with a secret key without ever storing it in plain text.
@@ -11,6 +12,8 @@ import * as nip49 from 'nostr-tools/nip49';
  * the pubkey and, if the user chose to remember it, the key encrypted with
  * their password (NIP-49 ncryptsec). On the next visit the user unlocks it
  * with the password, or pastes the nsec again if nothing was saved.
+ * Instead of a password the key can be locked with a passkey (Face ID /
+ * Touch ID), see passkeyLock.ts.
  */
 
 export const LOCAL_KEY_LOGIN = 'x-local-key';
@@ -18,6 +21,8 @@ export const LOCAL_KEY_LOGIN = 'x-local-key';
 export interface LocalKeyData {
   /** NIP-49 encrypted secret key, only when the user chose to remember it. */
   ncryptsec?: string;
+  /** Secret key encrypted with a passkey, when the user chose Face ID. */
+  passkey?: PasskeyLock;
   [key: string]: unknown;
 }
 
@@ -95,6 +100,38 @@ export function createLocalKeyLogin(nsec: string, password?: string): LocalKeyLo
   unlocked.set(pubkey, sk);
   changed();
   return { ...new NLogin(LOCAL_KEY_LOGIN, pubkey, data) };
+}
+
+/**
+ * Create a local key login whose key is saved encrypted with a new passkey
+ * (Face ID / Touch ID). Must be called from a tap.
+ */
+export async function createLocalKeyLoginWithPasskey(nsec: string): Promise<LocalKeyLogin> {
+  const sk = decodeNsec(nsec);
+  const pubkey = getPublicKey(sk);
+  const npub = nip19.npubEncode(pubkey);
+  const passkey = await createPasskeyLock(sk, {
+    pubkey,
+    label: `Notebook ${npub.slice(0, 12)}…`,
+  });
+  unlocked.set(pubkey, sk);
+  changed();
+  return { ...new NLogin(LOCAL_KEY_LOGIN, pubkey, { passkey } as LocalKeyData) };
+}
+
+/** Whether a saved login can be unlocked with a passkey. */
+export function hasPasskey(login: LocalKeyLogin): boolean {
+  const lock = login.data.passkey as PasskeyLock | undefined;
+  return typeof lock?.credentialId === 'string';
+}
+
+/** Unlock a saved login with its passkey. Must be called from a tap. */
+export async function unlockWithPasskey(login: LocalKeyLogin) {
+  if (!hasPasskey(login)) throw new Error('This account has no passkey.');
+  const sk = await openPasskeyLock(login.data.passkey as PasskeyLock);
+  if (getPublicKey(sk) !== login.pubkey) throw new Error("Couldn't unlock with this passkey.");
+  unlocked.set(login.pubkey, sk);
+  changed();
 }
 
 /** Unlock a saved login with its password. Throws on a wrong password. */

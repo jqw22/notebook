@@ -9,7 +9,7 @@ import {
 import { useAppContext } from '@/hooks/useAppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { loginWithBunker } from '@/lib/remoteSigner';
-import { createLocalKeyLogin } from '@/lib/localKey';
+import { createLocalKeyLogin, createLocalKeyLoginWithPasskey } from '@/lib/localKey';
 
 // NOTE: This file should not be edited except for adding new login methods.
 // There is deliberately no plain `nsec` login: Nostrify would store the key
@@ -39,6 +39,11 @@ export function useLoginActions() {
     // is also saved encrypted (NIP-49) so it can be unlocked on later visits.
     localKey(nsec: string, password?: string): void {
       addAndActivate(createLocalKeyLogin(nsec, password) as NLoginType);
+    },
+    // Same, but the key is saved encrypted with a new passkey (Face ID /
+    // Touch ID) instead of a password. Call from a tap.
+    async localKeyWithPasskey(nsec: string): Promise<void> {
+      addAndActivate((await createLocalKeyLoginWithPasskey(nsec)) as NLoginType);
     },
     // Login with a NIP-46 "bunker://" URI
     async bunker(uri: string): Promise<void> {
