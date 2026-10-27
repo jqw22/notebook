@@ -1,10 +1,9 @@
 import { useSeoMeta } from '@unhead/react';
-import { Link } from 'react-router-dom';
-import { NotebookPen, Shield, Key, ArrowRight } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
+import { NotebookPen, Shield, Key } from 'lucide-react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { LoginArea } from '@/components/auth/LoginArea';
-import { Button } from '@/components/ui/button';
 
 const Index = () => {
   useSeoMeta({
@@ -13,6 +12,9 @@ const Index = () => {
   });
 
   const { user } = useCurrentUser();
+
+  // Once logged in, there is nothing to do here: go straight to the notes.
+  if (user) return <Navigate to="/notes" replace />;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
@@ -47,21 +49,10 @@ const Index = () => {
 
         {/* CTA */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          {user ? (
-            <Button asChild size="lg" className="gap-2">
-              <Link to="/notes">
-                Open Notebook
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          ) : (
-            <>
-              <LoginArea className="max-w-48" />
-              <span className="text-sm text-muted-foreground">
-                to access your notebook
-              </span>
-            </>
-          )}
+          <LoginArea className="max-w-48" />
+          <span className="text-sm text-muted-foreground">
+            to access your notebook
+          </span>
         </div>
       </div>
     </div>
