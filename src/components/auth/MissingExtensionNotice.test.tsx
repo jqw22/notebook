@@ -30,7 +30,7 @@ describe('MissingExtensionNotice', () => {
     fireEvent.click(logOut);
 
     await waitFor(() => expect(localStorage.getItem('test-login')).toBe('[]'));
-    expect(await screen.findByRole('button', { name: /Connect bunker/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Connect a signer app/ })).toBeInTheDocument();
   });
 
   it('stays hidden when the extension is present', async () => {

@@ -18,7 +18,9 @@ type Remember = 'passkey' | 'password' | 'none';
 
 const REMEMBER_HINT: Record<Remember, string> = {
   passkey:
-    "Your key is saved encrypted and unlocked with Face ID or Touch ID once per visit.",
+    "Your key is saved encrypted and unlocked with Face ID or Touch ID once per visit. " +
+    'When asked where to save the passkey, choose Passwords (iCloud Keychain); ' +
+    "password managers such as Bitwarden don't support this yet.",
   password: "Your key is saved encrypted. You'll enter this password once per visit.",
   none: "Your key is kept only while this tab is open. You'll paste it again next time.",
 };
@@ -55,7 +57,8 @@ export const SecretKeyLoginForm: React.FC<SecretKeyLoginFormProps> = ({
     const cancelled = e instanceof DOMException && e.name === 'NotAllowedError';
     setError(
       cancelled
-        ? 'Face ID was cancelled. Try again, or choose another option.'
+        ? "Face ID didn't finish. If your password manager (e.g. Bitwarden) tried to save " +
+          'the passkey, try again and choose Passwords instead, or use a password.'
         : e instanceof Error
           ? e.message
           : "Couldn't log in with this key.",

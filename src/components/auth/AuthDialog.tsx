@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, ExternalLink, Puzzle, Copy, Check, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SecretKeyLoginForm } from './SecretKeyLoginForm';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   useLoginActions,
@@ -17,18 +16,12 @@ interface AuthDialogProps {
   onClose: () => void;
 }
 
-// A pasted nsec goes to SecretKeyLoginForm, which keeps the key in memory and
-// saves it only encrypted with the user's password.
-const looksLikeNsec = (value: string) => value.startsWith('nsec1');
-const validateBunkerUri = (uri: string) => uri.startsWith('bunker://');
-
 /** Signers we point new users to. Hard-coded https links only. */
 const SIGNER_LINKS = [
   { name: 'Alby', href: 'https://getalby.com/', kind: 'extension' },
   { name: 'nos2x', href: 'https://github.com/fiatjaf/nos2x', kind: 'extension' },
   { name: 'Nostash', href: 'https://apps.apple.com/app/nostash/id6744309333', kind: 'Safari extension for iPhone and iPad' },
   { name: 'Amber', href: 'https://github.com/greenart7c3/Amber', kind: 'Android app' },
-  { name: 'nsec.app', href: 'https://nsec.app/', kind: 'bunker, works in any browser' },
 ] as const;
 
 const connectStatusLabel = (status: NostrConnectStatus | null): string => {
@@ -52,11 +45,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   const [isExtensionLoggingIn, setIsExtensionLoggingIn] = useState(false);
   const [extensionError, setExtensionError] = useState('');
 
-  // Bunker state — a single input accepting a bunker:// URI.
-  const [bunkerInput, setBunkerInput] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
-
   // Nostrconnect ("Open signer app") state. No QR code is shown — the URI is
   // launched directly on the device and the app listens for the handshake.
   const [nostrConnectParams, setNostrConnectParams] = useState<NostrConnectParams | null>(null);
@@ -71,7 +59,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   const [linkCopied, setLinkCopied] = useState(false);
   // Secret key ("nsec") login, collapsed by default.
   const [showKeyForm, setShowKeyForm] = useState(false);
-  const [pastedNsec, setPastedNsec] = useState('');
 
   const login = useLoginActions();
   // Stable refs so the nostrconnect listening effect below doesn't restart on
@@ -100,9 +87,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       /* eslint-disable react-hooks/set-state-in-effect */
       setIsExtensionLoggingIn(false);
       setExtensionError('');
-      setBunkerInput('');
-      setIsLoggingIn(false);
-      setLoginError('');
       setNostrConnectParams(null);
       setNostrConnectUri('');
       setConnectError(null);
@@ -110,7 +94,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       setHasOpenedSigner(false);
       setLinkCopied(false);
       setShowKeyForm(false);
-      setPastedNsec('');
       /* eslint-enable react-hooks/set-state-in-effect */
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
@@ -196,9 +179,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // Start a nostrconnect session. We don't navigate to the URI here: on a
   // device with no app registered for nostrconnect:// (e.g. iPhone) that
   // just fails. The progress view offers an "Open" link and a copy button
-  // so the link can also be pasted into a web signer such as nsec.app.
+  // so the link can also be pasted into a web signer.
   const handleOpenSignerApp = () => {
-    setLoginError('');
     setHasOpenedSigner(true);
     setLinkCopied(false);
     if (!nostrConnectUri) generateConnectSession();
@@ -224,39 +206,6 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       setExtensionError(e instanceof Error ? e.message : 'Extension login failed.');
       setIsExtensionLoggingIn(false);
     }
-  };
-
-  // Log in with a NIP-46 bunker:// URI.
-  const handleBunkerLogin = () => {
-    const value = bunkerInput.trim();
-    if (!value) {
-      setLoginError('Enter a bunker://… URI.');
-      return;
-    }
-
-    if (looksLikeNsec(value)) {
-      // Hand a pasted secret key to the secret key form instead.
-      setBunkerInput('');
-      setPastedNsec(value);
-      setShowKeyForm(true);
-      return;
-    }
-
-    if (!validateBunkerUri(value)) {
-      setLoginError('Enter a valid bunker://… URI.');
-      return;
-    }
-
-    setIsLoggingIn(true);
-    setLoginError('');
-    login
-      .bunker(value)
-      .then(() => onClose())
-      .catch((error) => {
-        const reason = error instanceof Error ? ` (${error.message})` : '';
-        setLoginError(`Failed to connect. Check the bunker URI and that your signer is open.${reason}`);
-        setIsLoggingIn(false);
-      });
   };
 
   const extensionAvailable = hasNip07Extension();
@@ -306,7 +255,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">
                     No signer app on this device? Copy the link and paste it into your signer
-                    (for example nsec.app's "Connect app"), then come back here.
+                    (for example its "Connect app" option), then come back here.
                   </p>
                 </div>
               )}
@@ -354,20 +303,11 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
 
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <div className="h-px flex-1 bg-border" />
-                or use a remote signer
+                or use a signer app
                 <div className="h-px flex-1 bg-border" />
               </div>
 
-              {/* NIP-46 remote signer: bunker URI or nostrconnect. */}
-              <BunkerLoginForm
-                bunkerInput={bunkerInput}
-                setBunkerInput={setBunkerInput}
-                loginError={loginError}
-                setLoginError={setLoginError}
-                isLoggingIn={isLoggingIn}
-                onSubmit={handleBunkerLogin}
-              />
-
+              {/* NIP-46 remote signer via nostrconnect. */}
               <Button
                 variant="outline"
                 onClick={handleOpenSignerApp}
@@ -384,7 +324,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
               </div>
 
               {showKeyForm ? (
-                <SecretKeyLoginForm key={pastedNsec} initialNsec={pastedNsec} onLoggedIn={onClose} />
+                <SecretKeyLoginForm onLoggedIn={onClose} />
               ) : (
                 <Button
                   variant="outline"
@@ -424,52 +364,5 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
     </Dialog>
   );
 };
-
-/** Bunker URI input + submit. */
-interface BunkerLoginFormProps {
-  bunkerInput: string;
-  setBunkerInput: (v: string) => void;
-  loginError: string;
-  setLoginError: (v: string) => void;
-  isLoggingIn: boolean;
-  onSubmit: () => void;
-}
-
-const BunkerLoginForm: React.FC<BunkerLoginFormProps> = ({
-  bunkerInput,
-  setBunkerInput,
-  loginError,
-  setLoginError,
-  isLoggingIn,
-  onSubmit,
-}) => (
-  <form
-    onSubmit={(e) => {
-      e.preventDefault();
-      onSubmit();
-    }}
-    className="space-y-3"
-  >
-    <Input
-      value={bunkerInput}
-      onChange={(e) => {
-        setBunkerInput(e.target.value);
-        if (loginError) setLoginError('');
-      }}
-      placeholder="bunker://…"
-      autoComplete="off"
-      className={loginError ? 'border-destructive focus-visible:ring-destructive' : ''}
-    />
-    {loginError && <p className="text-sm text-destructive">{loginError}</p>}
-
-    <Button
-      type="submit"
-      disabled={isLoggingIn || !bunkerInput.trim()}
-      className="w-full rounded-full"
-    >
-      {isLoggingIn ? 'Connecting…' : 'Connect bunker'}
-    </Button>
-  </form>
-);
 
 export default AuthDialog;
