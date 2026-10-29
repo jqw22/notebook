@@ -344,20 +344,19 @@ export default function NotesPage() {
     <div className="min-h-screen bg-background">
       <div className="container max-w-4xl mx-auto py-8 px-4 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 sm:gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight whitespace-nowrap">My Notes</h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-1 whitespace-nowrap">
-              {notes.length} note{notes.length !== 1 ? 's' : ''}
-              <span className="hidden sm:inline"> &middot; end-to-end encrypted</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">My Notes</h1>
+            <p className="text-muted-foreground mt-1">
+              {notes.length} note{notes.length !== 1 ? 's' : ''} &middot; end-to-end encrypted
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <LoginArea className="max-w-40" />
             <BackupMenu pubkey={user.pubkey} onImported={handleImported} />
-            <Button onClick={openNewNote} className="gap-1.5" aria-label="New note">
+            <Button onClick={openNewNote} className="gap-1.5">
               <Plus className="h-4 w-4" />
-              <span className="max-[379px]:hidden">New</span><span className="hidden sm:inline"> Note</span>
+              New Note
             </Button>
           </div>
         </div>
