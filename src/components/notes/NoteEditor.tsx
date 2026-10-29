@@ -237,7 +237,7 @@ export function NoteEditor({
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Write your private note here..."
-                className="min-h-[200px] resize-y"
+                className="min-h-[200px] resize-y text-[15px] leading-relaxed"
               />
             </div>
 
