@@ -138,9 +138,9 @@ export function BackupMenu({ pubkey, onImported }: BackupMenuProps) {
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="gap-1.5" disabled={busy !== null} aria-label="Backup">
+          <Button variant="outline" className="gap-1.5" disabled={busy !== null}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
-            <span className="hidden sm:inline">Backup</span>
+            Backup
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
