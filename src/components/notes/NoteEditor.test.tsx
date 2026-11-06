@@ -56,4 +56,17 @@ describe('NoteEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('does not focus a field when opening an existing note', () => {
+    renderEditor();
+
+    expect(screen.getByLabelText('Title')).not.toHaveFocus();
+    expect(screen.getByLabelText('Content')).not.toHaveFocus();
+  });
+
+  it('focuses the title when creating a new note', () => {
+    renderEditor({ note: undefined });
+
+    expect(screen.getByLabelText('Title')).toHaveFocus();
+  });
 });

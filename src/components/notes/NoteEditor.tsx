@@ -202,7 +202,19 @@ export function NoteEditor({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && requestClose()}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+        <DialogContent
+          className="sm:max-w-2xl max-h-[90vh] flex flex-col"
+          onOpenAutoFocus={(e) => {
+            // Opening an existing note is usually for reading, so don't put the
+            // cursor in a field (on phones that pops up the keyboard). Focus the
+            // dialog itself so keyboard navigation and Escape still work.
+            // New notes keep the default: the title field is focused.
+            if (!isNew) {
+              e.preventDefault();
+              (e.currentTarget as HTMLElement | null)?.focus();
+            }
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{isNew ? 'New Note' : 'Edit Note'}</DialogTitle>
             <DialogDescription>
